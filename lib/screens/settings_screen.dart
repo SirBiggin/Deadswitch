@@ -4,6 +4,21 @@ import '../services/settings_service.dart';
 import '../services/sms_service.dart';
 import '../services/web_server.dart';
 
+const _kCommonCodes = [
+  ('🇺🇸 US/CA', '1'),
+  ('🇬🇧 UK',    '44'),
+  ('🇦🇺 AU',    '61'),
+  ('🇮🇳 IN',    '91'),
+  ('🇩🇪 DE',    '49'),
+  ('🇫🇷 FR',    '33'),
+  ('🇧🇷 BR',    '55'),
+  ('🇲🇽 MX',    '52'),
+  ('🇯🇵 JP',    '81'),
+  ('🇨🇳 CN',    '86'),
+  ('🇿🇦 ZA',    '27'),
+  ('🇳🇿 NZ',    '64'),
+];
+
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
   @override
@@ -11,15 +26,17 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final _keyCtrl    = TextEditingController();
-  final _fromCtrl   = TextEditingController();
-  final _testToCtrl = TextEditingController();
+  final _keyCtrl         = TextEditingController();
+  final _fromCtrl        = TextEditingController();
+  final _testToCtrl      = TextEditingController();
+  final _customCodeCtrl  = TextEditingController();
   bool _saved = false;
   bool _testing = false;
   String? _testResult;
   bool _testSuccess = false;
   bool _webPortalEnabled = false;
   String? _webIp;
+  String _countryCode = '1';
 
   @override
   void initState() { super.initState(); _load(); }
@@ -29,27 +46,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _keyCtrl.dispose();
     _fromCtrl.dispose();
     _testToCtrl.dispose();
+    _customCodeCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
-    final key     = await SettingsService.httpsmsKey;
-    final from    = await SettingsService.httpsmsFrom;
-    final portal  = await SettingsService.webPortalEnabled;
-    final ip      = portal ? await WebServer.localIp : null;
+    final key    = await SettingsService.httpsmsKey;
+    final from   = await SettingsService.httpsmsFrom;
+    final portal = await SettingsService.webPortalEnabled;
+    final ip     = portal ? await WebServer.localIp : null;
+    final code   = await SettingsService.countryCode;
     setState(() {
-      _keyCtrl.text      = key;
-      _fromCtrl.text     = from;
-      _webPortalEnabled  = portal;
-      _webIp             = ip;
+      _keyCtrl.text     = key;
+      _fromCtrl.text    = from;
+      _webPortalEnabled = portal;
+      _webIp            = ip;
+      _countryCode      = code;
+      if (!_kCommonCodes.any((c) => c.$2 == code)) {
+        _customCodeCtrl.text = code;
+      }
     });
   }
 
-  String _normalizePhone(String phone) {
-    final digits = phone.replaceAll(RegExp(r'\D'), '');
-    if (digits.length == 10) return '+1$digits';
-    if (digits.length == 11 && digits.startsWith('1')) return '+$digits';
-    return phone.startsWith('+') ? phone : '+$digits';
+  String _normalizePhone(String phone) =>
+      SettingsService.normalizePhone(phone, _countryCode);
+
+  Future<void> _saveCountryCode(String code) async {
+    await SettingsService.setCountryCode(code);
+    setState(() => _countryCode = code);
   }
 
   Future<void> _save() async {
@@ -255,6 +279,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: TextStyle(color: Color(0xFF555555), fontSize: 11),
                 ),
               ],
+            ]),
+          )),
+          const SizedBox(height: 20),
+          _section('Country Code'),
+          Card(child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text(
+                'Used to format phone numbers entered without a country code.',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              Wrap(spacing: 8, runSpacing: 8, children: _kCommonCodes.map((c) {
+                final selected = _countryCode == c.$2;
+                return ChoiceChip(
+                  label: Text('${c.$1}  +${c.$2}'),
+                  selected: selected,
+                  onSelected: (_) => _saveCountryCode(c.$2),
+                  selectedColor: const Color(0xFF2563eb),
+                  labelStyle: TextStyle(
+                    color: selected ? Colors.white : Colors.grey,
+                    fontSize: 12,
+                  ),
+                  backgroundColor: const Color(0xFF111111),
+                  side: BorderSide(
+                    color: selected ? const Color(0xFF2563eb) : const Color(0xFF333333),
+                  ),
+                );
+              }).toList()),
+              const SizedBox(height: 12),
+              Row(children: [
+                const Text('Other: +', style: TextStyle(color: Colors.grey, fontSize: 14)),
+                const SizedBox(width: 6),
+                SizedBox(
+                  width: 80,
+                  child: TextField(
+                    controller: _customCodeCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      hintText: '49',
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
+                    onSubmitted: (v) {
+                      final code = v.replaceAll(RegExp(r'\D'), '');
+                      if (code.isNotEmpty) _saveCountryCode(code);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: () {
+                    final code = _customCodeCtrl.text.replaceAll(RegExp(r'\D'), '');
+                    if (code.isNotEmpty) _saveCountryCode(code);
+                  },
+                  child: const Text('Set'),
+                ),
+              ]),
             ]),
           )),
           const SizedBox(height: 20),

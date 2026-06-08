@@ -4,17 +4,15 @@ import '../db/database.dart';
 import 'settings_service.dart';
 
 class SmsService {
-  static String _normalizePhone(String phone) {
-    final digits = phone.replaceAll(RegExp(r'\D'), '');
-    if (digits.length == 10) return '+1$digits';
-    if (digits.length == 11 && digits.startsWith('1')) return '+$digits';
-    return phone.startsWith('+') ? phone : '+$digits';
+  static Future<String> _norm(String phone) async {
+    final code = await SettingsService.countryCode;
+    return SettingsService.normalizePhone(phone, code);
   }
 
   static Future<Map<String, dynamic>> sendSms(String to, String message) async {
     final key  = await SettingsService.httpsmsKey;
-    final from = _normalizePhone(await SettingsService.httpsmsFrom);
-    final normalizedTo = _normalizePhone(to);
+    final from = await _norm(await SettingsService.httpsmsFrom);
+    final normalizedTo = await _norm(to);
     final res = await http.post(
       Uri.parse('https://api.httpsms.com/v1/messages/send'),
       headers: {'x-api-key': key, 'Content-Type': 'application/json'},
