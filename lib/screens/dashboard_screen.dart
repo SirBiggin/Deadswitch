@@ -11,13 +11,23 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen>
+    with WidgetsBindingObserver {
   int _tab = 0;
   DateTime? _sendAt;
   Timer? _timer;
 
   @override
-  void initState() { super.initState(); _checkPending(); }
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkPending();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _checkPending();
+  }
 
   Future<void> _checkPending() async {
     final at = await TriggerService.pendingSendAt();
@@ -50,7 +60,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   @override
-  void dispose() { _timer?.cancel(); super.dispose(); }
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
+    super.dispose();
+  }
 
   Widget _buildHome() {
     return SingleChildScrollView(
@@ -78,7 +92,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       bottomNavigationBar: NavigationBar(
         backgroundColor: const Color(0xFF1a1a1a),
         selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
+        onDestinationSelected: (i) {
+          setState(() => _tab = i);
+          if (i == 0) _checkPending();
+        },
         destinations: const [
           NavigationDestination(icon: Icon(Icons.dashboard), label: 'Dashboard'),
           NavigationDestination(icon: Icon(Icons.message),   label: 'Messages'),
