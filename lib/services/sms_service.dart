@@ -1,26 +1,32 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../db/database.dart';
-import 'settings_service.dart';
 
 class SmsService {
-  static Future<String> _normalizePhone(String phone) {
+  static const _channel = MethodChannel('com.deadswitch/sms');
+
+  static String _normalizePhone(String phone) {
     final digits = phone.replaceAll(RegExp(r'\D'), '');
-    if (digits.length == 10) return Future.value('+1$digits');
-    if (digits.length == 11 && digits.startsWith('1')) return Future.value('+$digits');
-    return Future.value(phone.startsWith('+') ? phone : '+$digits');
+    if (digits.length == 10) return '+1$digits';
+    if (digits.length == 11 && digits.startsWith('1')) return '+$digits';
+    return phone.startsWith('+') ? phone : '+$digits';
   }
 
   static Future<Map<String, dynamic>> sendSms(String to, String message) async {
-    final key  = await SettingsService.httpsmsKey;
-    final from = await _normalizePhone(await SettingsService.httpsmsFrom);
-    final normalizedTo = await _normalizePhone(to);
-    final res = await http.post(
-      Uri.parse('https://api.httpsms.com/v1/messages/send'),
-      headers: {'x-api-key': key, 'Content-Type': 'application/json'},
-      body: jsonEncode({'content': message, 'from': from, 'to': normalizedTo}),
-    );
-    return jsonDecode(res.body) as Map<String, dynamic>;
+    final status = await Permission.sms.request();
+    if (!status.isGranted) {
+      return {'status': 'error', 'message': 'SMS permission denied'};
+    }
+    final normalizedTo = _normalizePhone(to);
+    try {
+      final res = await _channel.invokeMethod<Map>('sendSms', {
+        'to': normalizedTo,
+        'message': message,
+      });
+      return Map<String, dynamic>.from(res ?? {'status': 'success'});
+    } on PlatformException catch (e) {
+      return {'status': 'error', 'message': e.message ?? 'SMS failed'};
+    }
   }
 
   static Future<List<Map<String, dynamic>>> sendAllMessages() async {
@@ -29,15 +35,14 @@ class SmsService {
     final results = <Map<String, dynamic>>[];
     for (final c in contacts) {
       try {
-        final phone = await _normalizePhone(c['phone'] as String);
-        final resp = await sendSms(phone, c['message'] as String);
+        final resp = await sendSms(c['phone'] as String, c['message'] as String);
         results.add({
           'contact': c['name'],
           'status': resp['status'] == 'success' ? 'sent' : 'failed',
           'detail': resp['message'] ?? '',
         });
       } catch (e) {
-        results.add({'contact': c['name'], 'status': 'failed', 'detail': '$e'});
+        results.add({'contact': c['name'] as String, 'status': 'failed', 'detail': '$e'});
       }
     }
     return results;
@@ -53,21 +58,19 @@ class SmsService {
     final results = <Map<String, dynamic>>[];
     for (final c in rows) {
       try {
-        final phone = await _normalizePhone(c['phone'] as String);
-        final resp = await sendSms(phone, group['message'] as String);
+        final resp = await sendSms(c['phone'] as String, group['message'] as String);
         results.add({
           'contact': c['name'],
           'status': resp['status'] == 'success' ? 'sent' : 'failed',
           'detail': resp['message'] ?? '',
         });
       } catch (e) {
-        results.add({'contact': c['name'], 'status': 'failed', 'detail': '$e'});
+        results.add({'contact': c['name'] as String, 'status': 'failed', 'detail': '$e'});
       }
     }
     return results;
   }
 
-  // Returns list of error strings; empty = all succeeded
   static Future<List<String>> sendAdHoc(List<int> contactIds, String message) async {
     final db = await DB.instance;
     final errors = <String>[];
@@ -76,8 +79,7 @@ class SmsService {
       if (rows.isEmpty) continue;
       final name = rows.first['name'] as String;
       try {
-        final phone = await _normalizePhone(rows.first['phone'] as String);
-        final resp = await sendSms(phone, message);
+        final resp = await sendSms(rows.first['phone'] as String, message);
         if (resp['status'] == 'error') {
           errors.add('$name: ${resp['message'] ?? resp.toString()}');
         }

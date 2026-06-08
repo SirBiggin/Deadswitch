@@ -11,10 +11,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final _keyCtrl    = TextEditingController();
-  final _fromCtrl   = TextEditingController();
   final _testToCtrl = TextEditingController();
-  bool _saved = false;
   bool _testing = false;
   String? _testResult;
   bool _testSuccess = false;
@@ -25,24 +22,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() { super.initState(); _load(); }
 
   @override
-  void dispose() {
-    _keyCtrl.dispose();
-    _fromCtrl.dispose();
-    _testToCtrl.dispose();
-    super.dispose();
-  }
+  void dispose() { _testToCtrl.dispose(); super.dispose(); }
 
   Future<void> _load() async {
-    final key     = await SettingsService.httpsmsKey;
-    final from    = await SettingsService.httpsmsFrom;
-    final portal  = await SettingsService.webPortalEnabled;
-    final ip      = portal ? await WebServer.localIp : null;
-    setState(() {
-      _keyCtrl.text      = key;
-      _fromCtrl.text     = from;
-      _webPortalEnabled  = portal;
-      _webIp             = ip;
-    });
+    final portal = await SettingsService.webPortalEnabled;
+    final ip     = portal ? await WebServer.localIp : null;
+    setState(() { _webPortalEnabled = portal; _webIp = ip; });
   }
 
   String _normalizePhone(String phone) {
@@ -50,16 +35,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (digits.length == 10) return '+1$digits';
     if (digits.length == 11 && digits.startsWith('1')) return '+$digits';
     return phone.startsWith('+') ? phone : '+$digits';
-  }
-
-  Future<void> _save() async {
-    final normalized = _normalizePhone(_fromCtrl.text.trim());
-    _fromCtrl.text = normalized;
-    await SettingsService.setHttpsmsKey(_keyCtrl.text.trim());
-    await SettingsService.setHttpsmsFrom(normalized);
-    setState(() => _saved = true);
-    await Future.delayed(const Duration(seconds: 2));
-    if (mounted) setState(() => _saved = false);
   }
 
   Future<void> _testSend() async {
@@ -74,9 +49,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final resp = await SmsService.sendSms(to, 'DeadSwitch test message');
       setState(() {
-        _testSuccess = resp['status'] == 'success' ||
-            (resp['data'] != null && resp['status'] != 'error');
-        _testResult = resp.entries.map((e) => '${e.key}: ${e.value}').join('\n');
+        _testSuccess = resp['status'] == 'success';
+        _testResult  = resp.entries.map((e) => '${e.key}: ${e.value}').join('\n');
       });
     } catch (e) {
       setState(() { _testSuccess = false; _testResult = 'Exception: $e'; });
@@ -115,7 +89,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-            TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save')),
+            TextButton(onPressed: () => Navigator.pop(context, true),  child: const Text('Save')),
           ],
         ));
     if (ok != true) return;
@@ -135,31 +109,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _section('httpsms API'),
-          Card(child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(children: [
-              TextField(controller: _keyCtrl, obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'API Key', hintText: 'From httpsms.com/settings')),
-              const SizedBox(height: 12),
-              TextField(controller: _fromCtrl, keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                    labelText: 'From Number', hintText: '+12025551234')),
-              const SizedBox(height: 16),
-              SizedBox(width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _save,
-                    child: Text(_saved ? 'Saved!' : 'Save Settings'),
-                  )),
-            ]),
-          )),
-          const SizedBox(height: 20),
-          _section('Test API Connection'),
+          _section('Test SMS'),
           Card(child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Send a test message to verify your API key and from number are working.',
+              const Text('Send a test SMS directly from this device to verify everything is working.',
                   style: TextStyle(color: Colors.grey, fontSize: 12)),
               const SizedBox(height: 12),
               TextField(controller: _testToCtrl, keyboardType: TextInputType.phone,
@@ -273,13 +227,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               _infoRow('App', 'DeadSwitch'),
-              _infoRow('Version', '1.2.6'),
-              _infoRow('SMS Provider', 'httpsms.com'),
-              const SizedBox(height: 8),
-              const Text(
-                'httpsms.com sends SMS via the httpsms Android app installed on your phone. '
-                'You must have the httpsms app installed and online for messages to deliver.',
-                style: TextStyle(color: Colors.grey, fontSize: 12)),
+              _infoRow('Version', '1.2.7'),
+              _infoRow('SMS', 'Direct (SmsManager)'),
             ]),
           )),
         ]),
@@ -297,7 +246,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     padding: const EdgeInsets.only(bottom: 6),
     child: Row(children: [
       Text('$k: ', style: const TextStyle(color: Colors.grey, fontSize: 13)),
-      Text(v, style: const TextStyle(color: Colors.white, fontSize: 13)),
+      Text(v,       style: const TextStyle(color: Colors.white, fontSize: 13)),
     ]),
   );
 }
