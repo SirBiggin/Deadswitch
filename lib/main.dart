@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:workmanager/workmanager.dart';
 import 'db/database.dart';
 import 'services/sms_service.dart';
@@ -19,12 +20,7 @@ void callbackDispatcher() {
           whereArgs: [DateTime.now().toUtc().toIso8601String()]);
       for (final row in due) {
         try {
-          // always send all messages
-          if (false) {  // removed: groups merged into messages
-            /* no-op */
-          } else {
-            await SmsService.sendAllMessages();
-          }
+          await SmsService.sendAllMessages();
           await db.update('pending_triggers', {'status': 'success'},
               where: 'id = ?', whereArgs: [row['id']]);
           await db.insert('trigger_log', {'status': 'success'});
@@ -41,6 +37,24 @@ void callbackDispatcher() {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  FlutterForegroundTask.init(
+    androidNotificationOptions: AndroidNotificationOptions(
+      channelId: 'deadswitch_web_portal',
+      channelName: 'Web Portal',
+      channelImportance: NotificationChannelImportance.LOW,
+      priority: NotificationPriority.LOW,
+    ),
+    iosNotificationOptions: const IOSNotificationOptions(
+      showNotification: false,
+    ),
+    foregroundTaskOptions: ForegroundTaskOptions(
+      eventAction: ForegroundTaskEventAction.nothing(),
+      autoRunOnBoot: false,
+      allowWifiLock: true,
+    ),
+  );
+
   FlutterError.onError = (d) {
     runApp(_CrashScreen(error: d.exception, stack: d.stack ?? StackTrace.empty));
   };
