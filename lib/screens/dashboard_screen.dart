@@ -48,15 +48,17 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Future<void> _initiate() async {
-    final at = await TriggerService.initiate();
-    setState(() => _sendAt = at);
+    final provisional = DateTime.now().add(const Duration(minutes: TriggerService.delayMinutes));
+    setState(() => _sendAt = provisional);
     _startTimer();
+    final at = await TriggerService.initiate();
+    if (mounted) setState(() => _sendAt = at);
   }
 
   Future<void> _abort() async {
-    await TriggerService.abort();
     _timer?.cancel();
     setState(() => _sendAt = null);
+    await TriggerService.abort();
   }
 
   @override
