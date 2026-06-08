@@ -10,9 +10,9 @@ import 'settings_service.dart';
 import 'sms_service.dart';
 import 'web_portal_html.dart';
 
-// Entry point for flutter_foreground_task's background isolate.
-// Android keeps this isolate alive as long as the foreground service runs,
-// even when the app is backgrounded or the screen sleeps.
+// Foreground task callback — keeps the process alive in background.
+// The HTTP server itself runs in the main isolate; this isolate is a no-op
+// that just holds the foreground service notification open.
 @pragma('vm:entry-point')
 void webPortalTaskCallback() {
   FlutterForegroundTask.setTaskHandler(_WebPortalTaskHandler());
@@ -20,35 +20,18 @@ void webPortalTaskCallback() {
 
 class _WebPortalTaskHandler extends TaskHandler {
   @override
-  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
-    try {
-      await WebServer._startServer();
-      final ip = await WebServer.localIp;
-      final text = ip != null
-          ? 'http://$ip:${WebServer.port}'
-          : 'Port ${WebServer.port}';
-      await FlutterForegroundTask.updateService(notificationText: text);
-    } catch (e) {
-      final msg = e.toString().replaceAll('\n', ' ');
-      await FlutterForegroundTask.updateService(
-        notificationTitle: 'Web Portal Error',
-        notificationText: msg.substring(0, msg.length.clamp(0, 80)),
-      );
-    }
-  }
-
+  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {}
   @override
   void onRepeatEvent(DateTime timestamp) {}
-
   @override
-  Future<void> onDestroy(DateTime timestamp) async {
-    await WebServer._stopServer();
-  }
+  Future<void> onDestroy(DateTime timestamp) async {}
 }
 
 class WebServer {
   static HttpServer? _server;
   static const int port = 8080;
+
+  static bool get isRunning => _server != null;
 
   static Future<String?> get localIp async {
     try {
@@ -65,50 +48,57 @@ class WebServer {
     return null;
   }
 
-  // Called from the main isolate — starts the foreground service.
-  // The task handler's onStart() then starts the HTTP server inside
-  // the background isolate, which Android cannot pause.
-  static Future<void> start() async {
-    if (await FlutterForegroundTask.isRunningService) return;
-    await FlutterForegroundTask.startService(
-      serviceId: 256,
-      notificationTitle: 'Web Portal',
-      notificationText: 'Starting…',
-      callback: webPortalTaskCallback,
-    );
+  // Starts HTTP server in main isolate, then tries to start foreground service
+  // for background persistence. HTTP server always starts regardless of whether
+  // the foreground service succeeds.
+  static Future<String?> start() async {
+    // Start (or restart) the HTTP server in the main isolate.
+    if (_server == null) {
+      final router = Router();
+      router.get('/', _serveIndex);
+      router.get('/favicon.ico', (Request r) => Response.notFound(''));
+      router.get('/api/messages', _getMessages);
+      router.post('/api/messages', _createMessage);
+      router.put('/api/messages/<id>',
+          (Request r, String id) => _updateMessage(r, id));
+      router.delete('/api/messages/<id>',
+          (Request r, String id) => _deleteMessage(r, id));
+      router.get('/api/phonebook', _getPhonebook);
+      router.get('/api/settings', _getSettings);
+      router.put('/api/settings', _updateSettings);
+      router.post('/api/settings/test', _testSend);
+      router.get('/<_|.*>', _serveIndex);
+
+      final handler = Pipeline()
+          .addMiddleware(_corsMiddleware())
+          .addMiddleware(_authMiddleware())
+          .addHandler(router.call);
+
+      _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, port);
+    }
+
+    // Best-effort foreground service to keep process alive when backgrounded.
+    // Failures here are non-fatal — HTTP server is already running above.
+    try {
+      if (!await FlutterForegroundTask.isRunningService) {
+        final ip = await localIp;
+        final text = ip != null ? 'http://$ip:$port' : 'Port $port';
+        await FlutterForegroundTask.startService(
+          serviceId: 256,
+          notificationTitle: 'Web Portal Active',
+          notificationText: text,
+          callback: webPortalTaskCallback,
+        );
+      }
+    } catch (_) {}
+
+    return null;
   }
 
   static Future<void> stop() async {
-    await FlutterForegroundTask.stopService();
-  }
-
-  // ── Internal — runs in the task handler isolate ───────────────────────────
-
-  static Future<void> _startServer() async {
-    if (_server != null) return;
-
-    final router = Router();
-    router.get('/', _serveIndex);
-    router.get('/favicon.ico', (Request r) => Response.notFound(''));
-    router.get('/api/messages', _getMessages);
-    router.post('/api/messages', _createMessage);
-    router.put('/api/messages/<id>', (Request r, String id) => _updateMessage(r, id));
-    router.delete('/api/messages/<id>', (Request r, String id) => _deleteMessage(r, id));
-    router.get('/api/phonebook', _getPhonebook);
-    router.get('/api/settings', _getSettings);
-    router.put('/api/settings', _updateSettings);
-    router.post('/api/settings/test', _testSend);
-    router.get('/<_|.*>', _serveIndex);
-
-    final handler = Pipeline()
-        .addMiddleware(_corsMiddleware())
-        .addMiddleware(_authMiddleware())
-        .addHandler(router.call);
-
-    _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, port);
-  }
-
-  static Future<void> _stopServer() async {
+    try {
+      await FlutterForegroundTask.stopService();
+    } catch (_) {}
     await _server?.close(force: true);
     _server = null;
   }
@@ -161,7 +151,8 @@ class WebServer {
         'name': m['name'],
         'message': m['message'],
         'recipients': recs
-            .map((r) => {'id': r['id'], 'name': r['name'], 'phone': r['phone']})
+            .map((r) =>
+                {'id': r['id'], 'name': r['name'], 'phone': r['phone']})
             .toList(),
       });
     }
@@ -259,8 +250,6 @@ class WebServer {
       return _ok({'error': '$e'}, status: 500);
     }
   }
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> _body(Request req) async =>
       jsonDecode(await req.readAsString()) as Map<String, dynamic>;

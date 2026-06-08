@@ -13,23 +13,28 @@ import 'screens/dashboard_screen.dart';
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, _) async {
-    if (task == TriggerService.taskName) {
-      final db = await DB.instance;
-      final due = await db.query('pending_triggers',
-          where: "status = 'pending' AND send_at <= ?",
-          whereArgs: [DateTime.now().toUtc().toIso8601String()]);
-      for (final row in due) {
-        try {
-          await SmsService.sendAllMessages();
-          await db.update('pending_triggers', {'status': 'success'},
-              where: 'id = ?', whereArgs: [row['id']]);
-          await db.insert('trigger_log', {'status': 'success'});
-        } catch (_) {
-          await db.update('pending_triggers', {'status': 'error'},
-              where: 'id = ?', whereArgs: [row['id']]);
-          await db.insert('trigger_log', {'status': 'error'});
+    // Wrap everything so uncaught exceptions don't cause WorkManager to retry.
+    try {
+      if (task == TriggerService.taskName) {
+        final db = await DB.instance;
+        final due = await db.query('pending_triggers',
+            where: "status = 'pending' AND send_at <= ?",
+            whereArgs: [DateTime.now().toUtc().toIso8601String()]);
+        for (final row in due) {
+          try {
+            await SmsService.sendAllMessages();
+            await db.update('pending_triggers', {'status': 'success'},
+                where: 'id = ?', whereArgs: [row['id']]);
+            await db.insert('trigger_log', {'status': 'success'});
+          } catch (_) {
+            await db.update('pending_triggers', {'status': 'error'},
+                where: 'id = ?', whereArgs: [row['id']]);
+            await db.insert('trigger_log', {'status': 'error'});
+          }
         }
       }
+    } catch (_) {
+      // Swallow unexpected errors — returning true prevents WorkManager retries.
     }
     return true;
   });
@@ -61,12 +66,9 @@ void main() async {
   await runZonedGuarded(() async {
     try {
       await Workmanager().initialize(callbackDispatcher);
-    } catch (e) {
-      // WorkManager failed to init — app still runs
-    }
+    } catch (_) {}
     try {
       if (await SettingsService.webPortalEnabled) {
-        
         await WebServer.start();
       }
     } catch (_) {}
@@ -91,13 +93,16 @@ class _CrashScreen extends StatelessWidget {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Text('CRASH REPORT', style: TextStyle(color: Color(0xFFff4444),
                   fontSize: 20, fontWeight: FontWeight.bold)),
-              const Text('Long-press text below to copy', style: TextStyle(color: Colors.grey, fontSize: 11)),
+              const Text('Long-press text below to copy',
+                  style: TextStyle(color: Colors.grey, fontSize: 11)),
               const SizedBox(height: 12),
               SelectableText(error.toString(),
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontFamily: 'monospace')),
+                  style: const TextStyle(
+                      color: Colors.white, fontSize: 13, fontFamily: 'monospace')),
               const SizedBox(height: 12),
               SelectableText(stack.toString(),
-                  style: const TextStyle(color: Color(0xFFaaaaaa), fontSize: 10, fontFamily: 'monospace')),
+                  style: const TextStyle(
+                      color: Color(0xFFaaaaaa), fontSize: 10, fontFamily: 'monospace')),
             ]),
           ),
         ),
@@ -129,11 +134,14 @@ class DeadSwitchApp extends StatelessWidget {
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: const Color(0xFF111111),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
+          border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
               borderSide: const BorderSide(color: Color(0xFF333333))),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
+          enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
               borderSide: const BorderSide(color: Color(0xFF333333))),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
+          focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
               borderSide: const BorderSide(color: Color(0xFF2563eb))),
         ),
       ),
@@ -150,13 +158,18 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   @override
-  void initState() { super.initState(); _check(); }
+  void initState() {
+    super.initState();
+    _check();
+  }
 
   Future<void> _check() async {
     final has = await SettingsService.hasPin;
     if (!mounted) return;
-    Navigator.pushReplacement(context, MaterialPageRoute(
-        builder: (_) => has ? const LoginScreen() : const LoginScreen(isSetup: true)));
+    Navigator.pushReplacement(context,
+        MaterialPageRoute(
+            builder: (_) =>
+                has ? const LoginScreen() : const LoginScreen(isSetup: true)));
   }
 
   @override
