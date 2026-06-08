@@ -7,7 +7,6 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; background: #0f0f0f; color: #e0e0e0; min-height: 100vh; }
-    a { color: #7eb8f7; }
 
     nav { background: #1a1a1a; border-bottom: 1px solid #2a2a2a; padding: 0 1rem; display: flex; align-items: center; height: 52px; }
     .brand { font-weight: 700; font-size: 1.05rem; color: #fff; margin-right: 1.5rem; white-space: nowrap; }
@@ -29,6 +28,7 @@
     .btn-ghost   { background: #242424; color: #bbb; border: 1px solid #333; }
     .btn-danger  { background: #2b1010; color: #c87e7e; border: 1px solid #5a2020; }
     .btn-green   { background: #0f2b0f; color: #7ec87e; border: 1px solid #2d5a2d; }
+    .btn-amber   { background: #2b1f0a; color: #f59e0b; border: 1px solid #5a3e14; }
     .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.79rem; }
 
     .field { margin-bottom: 0.85rem; }
@@ -41,14 +41,12 @@
     input:focus, textarea:focus { outline: none; border-color: #2563eb; }
     textarea { resize: vertical; min-height: 90px; }
 
-    /* Overlays / modals */
     .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.82); z-index: 200; align-items: flex-start; justify-content: center; padding: 5vh 1rem 2rem; overflow-y: auto; }
     .overlay.open { display: flex; }
     .modal { background: #1a1a1a; border: 1px solid #333; border-radius: 12px; width: 100%; max-width: 500px; padding: 1.5rem; }
     .modal-title { font-size: 1rem; font-weight: 700; color: #fff; margin-bottom: 1.25rem; }
     .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1.25rem; }
 
-    /* PIN overlay */
     #pin-overlay { display: flex; position: fixed; inset: 0; background: #0f0f0f; z-index: 300; align-items: center; justify-content: center; }
     .pin-box { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 14px; padding: 2rem 1.75rem; width: min(94vw, 360px); text-align: center; }
     .pin-skull { font-size: 2.2rem; margin-bottom: 0.5rem; }
@@ -56,20 +54,17 @@
     .pin-sub { font-size: 0.82rem; color: #666; margin-bottom: 1.25rem; }
     #pin-error { color: #c87e7e; font-size: 0.8rem; margin-top: 0.6rem; display: none; }
 
-    /* Item rows */
     .item-row { display: flex; align-items: flex-start; gap: 0.9rem; padding: 0.9rem 0; border-bottom: 1px solid #1e1e1e; }
     .item-row:last-child { border-bottom: none; }
     .item-info { flex: 1; min-width: 0; }
     .item-name { color: #fff; font-weight: 600; font-size: 0.95rem; }
-    .item-sub  { color: #777; font-size: 0.8rem; margin-top: 0.2rem; }
-    .item-msg  { color: #aaa; font-size: 0.82rem; margin-top: 0.45rem; background: #111; padding: 0.5rem 0.65rem; border-radius: 5px; border: 1px solid #222; white-space: pre-wrap; word-break: break-word; }
+    .item-recipients { display: flex; align-items: center; gap: 0.3rem; margin-top: 0.25rem; color: #2563eb; font-size: 0.8rem; }
+    .item-msg  { color: #555; font-size: 0.82rem; margin-top: 0.4rem; background: #111; padding: 0.45rem 0.65rem; border-radius: 5px; border: 1px solid #1e1e1e; white-space: pre-wrap; word-break: break-word; }
     .item-actions { display: flex; gap: 0.35rem; flex-shrink: 0; padding-top: 0.05rem; }
 
-    /* Recipients inside group modal */
-    .rec-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0; border-bottom: 1px solid #1e1e1e; }
-    .rec-row:last-child { border-bottom: none; }
+    .rec-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.65rem; background: #111; border-radius: 6px; border: 1px solid #1e1e1e; margin-bottom: 6px; }
     .rec-info { flex: 1; }
-    .rec-name { color: #e0e0e0; font-size: 0.88rem; }
+    .rec-name  { color: #e0e0e0; font-size: 0.88rem; }
     .rec-phone { color: #666; font-size: 0.78rem; }
     .btn-rm { background: none; border: none; color: #555; cursor: pointer; font-size: 0.95rem; padding: 0 0.2rem; line-height: 1; }
     .btn-rm:hover { color: #c87e7e; }
@@ -78,7 +73,6 @@
     .add-rec-row { display: flex; gap: 0.4rem; align-items: flex-end; }
     .add-rec-row input { flex: 1; }
 
-    /* Alert boxes */
     .alert { padding: 0.6rem 0.85rem; border-radius: 6px; font-size: 0.8rem; font-family: monospace; white-space: pre-wrap; word-break: break-all; margin-top: 0.75rem; }
     .alert-ok  { background: #0c280c; border: 1px solid #295229; color: #7ec87e; }
     .alert-err { background: #280c0c; border: 1px solid #522929; color: #c87e7e; }
@@ -86,11 +80,13 @@
     .empty { text-align: center; color: #555; padding: 3rem 1rem; font-size: 0.9rem; }
     .spin { width: 14px; height: 14px; border: 2px solid #333; border-top-color: #7eb8f7; border-radius: 50%; animation: spin 0.55s linear infinite; display: inline-block; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .rec-section-hdr { display: flex; align-items: center; justify-content: space-between; margin: 1rem 0 0.5rem; }
+    .rec-section-hdr label { margin: 0; }
+    .rec-add-btns { display: flex; gap: 0.4rem; }
   </style>
 </head>
 <body>
 
-<!-- PIN overlay -->
 <div id="pin-overlay">
   <div class="pin-box">
     <div class="pin-skull">☠</div>
@@ -104,31 +100,20 @@
   </div>
 </div>
 
-<!-- App shell (hidden until auth) -->
 <div id="app" style="display:none;">
   <nav>
     <span class="brand">☠ DeadSwitch</span>
-    <span class="nav-tab active" id="nt-messages" onclick="showTab('messages')">Individual Messages</span>
-    <span class="nav-tab" id="nt-groups"   onclick="showTab('groups')">Groups</span>
+    <span class="nav-tab active" id="nt-messages" onclick="showTab('messages')">Messages</span>
     <span class="nav-tab" id="nt-settings" onclick="showTab('settings')">Settings</span>
   </nav>
 
-  <!-- Individual Messages -->
+  <!-- Messages -->
   <div class="container" id="tab-messages">
     <div class="page-header">
-      <div class="page-title">Individual Messages</div>
-      <button class="btn btn-primary" onclick="openContactModal()">+ Add Message</button>
+      <div class="page-title">Messages</div>
+      <button class="btn btn-primary" onclick="openModal()">+ New Message</button>
     </div>
-    <div class="card" id="contacts-card"><div class="empty">Loading…</div></div>
-  </div>
-
-  <!-- Groups -->
-  <div class="container" id="tab-groups" style="display:none;">
-    <div class="page-header">
-      <div class="page-title">Groups</div>
-      <button class="btn btn-primary" onclick="openGroupModal()">+ New Group</button>
-    </div>
-    <div id="groups-list"></div>
+    <div id="messages-list"></div>
   </div>
 
   <!-- Settings -->
@@ -150,49 +135,44 @@
   </div>
 </div>
 
-<!-- Contact modal -->
-<div class="overlay" id="contact-overlay" onclick="if(event.target===this)closeContactModal()">
+<!-- Message modal -->
+<div class="overlay" id="msg-overlay" onclick="if(event.target===this)closeModal()">
   <div class="modal">
-    <div class="modal-title" id="contact-modal-title">Add Message</div>
-    <div class="field"><label>Name</label><input type="text" id="c-name" placeholder="John Doe" autocomplete="off"></div>
-    <div class="field"><label>Phone Number</label><input type="tel" id="c-phone" placeholder="+12025551234" autocomplete="off"></div>
-    <div class="field"><label>Message <span style="color:#555;font-size:0.75rem;">(sent when triggered)</span></label>
-      <textarea id="c-message" placeholder="The message to send this person…"></textarea></div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeContactModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveContact()">Save</button>
-    </div>
-  </div>
-</div>
+    <div class="modal-title" id="modal-title">New Message</div>
 
-<!-- Group modal -->
-<div class="overlay" id="group-overlay" onclick="if(event.target===this)closeGroupModal()">
-  <div class="modal">
-    <div class="modal-title" id="group-modal-title">New Group</div>
-    <div class="field"><label>Group Name</label><input type="text" id="g-name" placeholder="e.g. Family" autocomplete="off"></div>
+    <!-- Group name — only shown when 2+ recipients -->
+    <div class="field" id="group-name-field" style="display:none;">
+      <label>Group Name</label>
+      <input type="text" id="m-name" placeholder="e.g. Family, Work, Emergency" autocomplete="off">
+    </div>
+
     <div class="field">
-      <label>Message <span style="color:#555;font-size:0.75rem;">(sent to all recipients)</span></label>
-      <textarea id="g-message" placeholder="The message to send when this group is triggered…"></textarea>
+      <label>Message to send</label>
+      <textarea id="m-message" placeholder="What gets sent when the switch triggers…"></textarea>
     </div>
 
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
-      <label style="margin:0;font-size:0.75rem;color:#666;font-weight:600;letter-spacing:0.8px;">RECIPIENTS</label>
-      <button type="button" class="btn btn-ghost btn-sm" onclick="toggleAddRec()">+ Add Recipient</button>
+    <div class="rec-section-hdr">
+      <label style="font-size:0.75rem;color:#666;font-weight:600;letter-spacing:0.8px;">RECIPIENTS</label>
+      <div class="rec-add-btns">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="toggleAddRec()">+ Manual</button>
+      </div>
     </div>
+
     <div id="rec-list"></div>
-    <div id="no-recs" style="color:#555;font-size:0.84rem;padding:0.35rem 0;">No recipients added.</div>
+    <div id="no-recs" style="color:#555;font-size:0.84rem;padding:0.35rem 0 0.5rem;">No recipients yet.</div>
+
     <div class="add-rec-form" id="add-rec-form">
       <div class="add-rec-row">
-        <input type="text" id="r-name" placeholder="Name" autocomplete="off">
+        <input type="text" id="r-name"  placeholder="Name" autocomplete="off">
         <input type="tel"  id="r-phone" placeholder="Phone" autocomplete="off">
         <button class="btn btn-primary btn-sm" onclick="addRecipient()">Add</button>
-        <button class="btn btn-ghost btn-sm" onclick="toggleAddRec()">✕</button>
+        <button class="btn btn-ghost btn-sm"   onclick="toggleAddRec()">✕</button>
       </div>
     </div>
 
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeGroupModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveGroup()">Save</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveMessage()">Save</button>
     </div>
   </div>
 </div>
@@ -201,13 +181,11 @@
 'use strict';
 
 let _pin = sessionStorage.getItem('ds_pin') || '';
-let _contacts = [];
-let _groups = [];
-let _editContactId = null;
-let _editGroupId = null;
+let _messages = [];
+let _editId = null;
 let _recs = [];
 
-// ── Auth ────────────────────────────────────────────────────────────────────
+// ── Auth ─────────────────────────────────────────────────────────────────────
 async function init() {
   try {
     await api('GET', '/settings');
@@ -247,7 +225,7 @@ function unlock() {
   loadMessages();
 }
 
-// ── API ─────────────────────────────────────────────────────────────────────
+// ── API ───────────────────────────────────────────────────────────────────────
 async function api(method, path, body) {
   const h = {'Content-Type': 'application/json'};
   if (_pin) h['Authorization'] = 'Bearer ' + _pin;
@@ -259,130 +237,78 @@ async function api(method, path, body) {
   return res.json();
 }
 
-// ── Tabs ────────────────────────────────────────────────────────────────────
+// ── Tabs ──────────────────────────────────────────────────────────────────────
 function showTab(t) {
-  ['messages','groups','settings'].forEach(x => {
+  ['messages','settings'].forEach(x => {
     document.getElementById('tab-' + x).style.display = x === t ? '' : 'none';
     document.getElementById('nt-' + x).classList.toggle('active', x === t);
   });
   if (t === 'messages') loadMessages();
-  if (t === 'groups')   loadGroups();
   if (t === 'settings') loadSettings();
 }
 
-// ── Individual Messages ──────────────────────────────────────────────────────
+// ── Messages ──────────────────────────────────────────────────────────────────
 async function loadMessages() {
-  _contacts = await api('GET', '/contacts');
+  _messages = await api('GET', '/messages');
   renderMessages();
 }
 
 function renderMessages() {
-  const el = document.getElementById('contacts-card');
-  if (_contacts.length === 0) {
-    el.innerHTML = '<div class="empty">No messages yet — add your first one.</div>';
+  const el = document.getElementById('messages-list');
+  if (_messages.length === 0) {
+    el.innerHTML = '<div class="card empty">No messages configured — tap + New Message to add one.</div>';
     return;
   }
-  el.innerHTML = _contacts.map(c => `
-    <div class="item-row">
-      <div class="item-info">
-        <div class="item-name">${esc(c.name)}</div>
-        <div class="item-sub">${esc(c.phone)}</div>
-        <div class="item-msg">${esc(c.message)}</div>
-      </div>
-      <div class="item-actions">
-        <button class="btn btn-ghost btn-sm" onclick="openContactModal(${c.id})">Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="delContact(${c.id},'${esc(c.name)}')">Delete</button>
-      </div>
-    </div>`).join('');
-}
-
-function openContactModal(id) {
-  _editContactId = id ?? null;
-  const c = id ? _contacts.find(x => x.id === id) : null;
-  document.getElementById('contact-modal-title').textContent = id ? 'Edit Message' : 'Add Message';
-  document.getElementById('c-name').value    = c?.name    ?? '';
-  document.getElementById('c-phone').value   = c?.phone   ?? '';
-  document.getElementById('c-message').value = c?.message ?? '';
-  document.getElementById('contact-overlay').classList.add('open');
-  setTimeout(() => document.getElementById('c-name').focus(), 50);
-}
-
-function closeContactModal() {
-  document.getElementById('contact-overlay').classList.remove('open');
-}
-
-async function saveContact() {
-  const name = document.getElementById('c-name').value.trim();
-  const phone = document.getElementById('c-phone').value.trim();
-  const message = document.getElementById('c-message').value.trim();
-  if (!name || !phone) return;
-  if (_editContactId) await api('PUT', '/contacts/' + _editContactId, {name, phone, message});
-  else                await api('POST', '/contacts', {name, phone, message});
-  closeContactModal();
-  await loadMessages();
-}
-
-async function delContact(id, name) {
-  if (!confirm('Delete "' + name + '"?')) return;
-  await api('DELETE', '/contacts/' + id);
-  await loadMessages();
-}
-
-// ── Groups ───────────────────────────────────────────────────────────────────
-async function loadGroups() {
-  _groups = await api('GET', '/groups');
-  renderGroups();
-}
-
-function renderGroups() {
-  const el = document.getElementById('groups-list');
-  if (_groups.length === 0) {
-    el.innerHTML = '<div class="card empty">No groups yet — create your first one.</div>';
-    return;
-  }
-  el.innerHTML = _groups.map(g => `
-    <div class="card">
-      <div class="item-row" style="padding:0;border:none;">
+  el.innerHTML = _messages.map(m => {
+    const recs = m.recipients || [];
+    const recText = recs.length === 0
+      ? 'No recipients'
+      : recs.length + ' recipient' + (recs.length === 1 ? '' : 's') + ': ' + recs.map(r => esc(r.name)).join(', ');
+    return `
+    <div class="card" style="padding:0.9rem 1rem;">
+      <div class="item-row">
         <div class="item-info">
-          <div class="item-name">${esc(g.name)}</div>
-          <div class="item-msg">${esc(g.message)}</div>
-          <div style="margin-top:0.5rem;font-size:0.79rem;color:#666;">
-            ${g.recipients.length === 0
-              ? '<span style="color:#3a3a3a;">No recipients</span>'
-              : g.recipients.map(r => `<span style="display:inline-block;margin-right:0.6rem;">&#128100; ${esc(r.name)}</span>`).join('')}
+          <div class="item-name">${esc(m.name)}</div>
+          <div class="item-recipients">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            ${esc(recText)}
           </div>
+          ${m.message ? `<div class="item-msg">${esc(m.message)}</div>` : ''}
         </div>
         <div class="item-actions">
-          <button class="btn btn-ghost btn-sm" onclick="openGroupModal(${g.id})">Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="delGroup(${g.id},'${esc(g.name)}')">Delete</button>
+          <button class="btn btn-ghost btn-sm" onclick="openModal(${m.id})">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="delMessage(${m.id},'${esc(m.name)}')">Delete</button>
         </div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
-function openGroupModal(id) {
-  _editGroupId = id ?? null;
-  const g = id ? _groups.find(x => x.id === id) : null;
-  document.getElementById('group-modal-title').textContent = id ? 'Edit Group' : 'New Group';
-  document.getElementById('g-name').value    = g?.name    ?? '';
-  document.getElementById('g-message').value = g?.message ?? '';
-  _recs = g ? g.recipients.map(r => ({name: r.name, phone: r.phone})) : [];
-  renderRecList();
+function openModal(id) {
+  _editId = id ?? null;
+  const m = id ? _messages.find(x => x.id === id) : null;
+  document.getElementById('modal-title').textContent = id ? 'Edit Message' : 'New Message';
+  document.getElementById('m-name').value    = m?.name    ?? '';
+  document.getElementById('m-message').value = m?.message ?? '';
+  _recs = m ? (m.recipients || []).map(r => ({name: r.name, phone: r.phone})) : [];
   document.getElementById('add-rec-form').classList.remove('open');
   document.getElementById('r-name').value  = '';
   document.getElementById('r-phone').value = '';
-  document.getElementById('group-overlay').classList.add('open');
-  setTimeout(() => document.getElementById('g-name').focus(), 50);
+  renderRecList();
+  document.getElementById('msg-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('m-message').focus(), 50);
 }
 
-function closeGroupModal() {
-  document.getElementById('group-overlay').classList.remove('open');
+function closeModal() {
+  document.getElementById('msg-overlay').classList.remove('open');
 }
 
 function renderRecList() {
-  const el = document.getElementById('rec-list');
+  const el   = document.getElementById('rec-list');
   const none = document.getElementById('no-recs');
+  const gf   = document.getElementById('group-name-field');
   none.style.display = _recs.length === 0 ? '' : 'none';
+  gf.style.display   = _recs.length >= 2  ? '' : 'none';
   el.innerHTML = _recs.map((r, i) => `
     <div class="rec-row">
       <div class="rec-info">
@@ -405,6 +331,7 @@ function addRecipient() {
   const name  = document.getElementById('r-name').value.trim();
   const phone = document.getElementById('r-phone').value.trim();
   if (!name || !phone) return;
+  if (_recs.some(r => r.phone === phone)) return;
   _recs.push({name, phone});
   renderRecList();
   document.getElementById('r-name').value  = '';
@@ -416,24 +343,32 @@ document.getElementById('r-phone').addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); addRecipient(); }
 });
 
-async function saveGroup() {
-  const name    = document.getElementById('g-name').value.trim();
-  const message = document.getElementById('g-message').value.trim();
-  if (!name) return;
+async function saveMessage() {
+  let name;
+  if (_recs.length >= 2) {
+    name = document.getElementById('m-name').value.trim();
+    if (!name) { document.getElementById('m-name').focus(); return; }
+  } else if (_recs.length === 1) {
+    name = _recs[0].name;
+  } else {
+    showAlert('modal-alert', 'Add at least one recipient.', false);
+    return;
+  }
+  const message = document.getElementById('m-message').value.trim();
   const body = {name, message, recipients: _recs};
-  if (_editGroupId) await api('PUT', '/groups/' + _editGroupId, body);
-  else              await api('POST', '/groups', body);
-  closeGroupModal();
-  await loadGroups();
+  if (_editId) await api('PUT', '/messages/' + _editId, body);
+  else         await api('POST', '/messages', body);
+  closeModal();
+  await loadMessages();
 }
 
-async function delGroup(id, name) {
-  if (!confirm('Delete group "' + name + '"?')) return;
-  await api('DELETE', '/groups/' + id);
-  await loadGroups();
+async function delMessage(id, name) {
+  if (!confirm('Delete "' + name + '"?')) return;
+  await api('DELETE', '/messages/' + id);
+  await loadMessages();
 }
 
-// ── Settings ─────────────────────────────────────────────────────────────────
+// ── Settings ──────────────────────────────────────────────────────────────────
 async function loadSettings() {
   const s = await api('GET', '/settings');
   document.getElementById('s-key').value  = s.httpsms_key  ?? '';
@@ -444,7 +379,7 @@ async function saveSettings() {
   const httpsms_key  = document.getElementById('s-key').value.trim();
   const httpsms_from = document.getElementById('s-from').value.trim();
   await api('PUT', '/settings', {httpsms_key, httpsms_from});
-  alert('settings-alert', 'Settings saved.', true);
+  showAlert('settings-alert', 'Settings saved.', true);
 }
 
 async function testSend() {
@@ -456,23 +391,26 @@ async function testSend() {
   try {
     const res = await api('POST', '/settings/test', {to});
     const ok  = res.status === 'success' || (res.data && !res.error);
-    const txt = Object.entries(res).map(([k,v]) => k + ': ' + JSON.stringify(v)).join('\n');
-    alert('test-alert', txt, ok);
+    showAlert('test-alert', Object.entries(res).map(([k,v]) => k+': '+JSON.stringify(v)).join('\n'), ok);
   } catch(e) {
-    alert('test-alert', 'Error: ' + e.message, false);
+    showAlert('test-alert', 'Error: ' + e.message, false);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Send Test Message';
   }
 }
 
-function alert(id, text, ok) {
-  const el = document.getElementById(id);
+function showAlert(id, text, ok) {
+  let el = document.getElementById(id);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = id;
+    document.getElementById('msg-overlay').querySelector('.modal').appendChild(el);
+  }
   el.className = 'alert ' + (ok ? 'alert-ok' : 'alert-err');
   el.textContent = text;
 }
 
-// ── Utils ─────────────────────────────────────────────────────────────────────
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
