@@ -107,7 +107,7 @@ class _StatusCardState extends State<_StatusCard> {
   Future<void> _load() async {
     final db    = await DB.instance;
     final msgs  = await db.rawQuery('SELECT COUNT(*) as c FROM messages');
-    final recs  = await db.rawQuery('SELECT COUNT(*) as c FROM message_recipients');
+    final recs  = await db.rawQuery('SELECT COUNT(DISTINCT phone) as c FROM message_recipients');
     final log   = await db.query('trigger_log', orderBy: 'id DESC', limit: 1);
     setState(() {
       _msgCount       = (msgs.first['c'] as int? ?? 0);
