@@ -1,7 +1,7 @@
 name: deadswitch_app
 description: "DeadSwitch - Dead man's switch app"
 publish_to: 'none'
-version: 1.2.13+25
+version: 1.2.14+26
 
 environment:
   sdk: ^3.12.1
@@ -21,6 +21,7 @@ dependencies:
   shelf: ^1.4.2
   shelf_router: ^1.1.4
   flutter_foreground_task: ^8.14.0
+  package_info_plus: ^8.3.0
 
 dev_dependencies:
   flutter_test:
