@@ -19,9 +19,9 @@ void callbackDispatcher() {
           whereArgs: [DateTime.now().toUtc().toIso8601String()]);
       for (final row in due) {
         try {
-          final gid = row['group_id'];
-          if (gid != null) {
-            await SmsService.sendGroup(gid as int);
+          // always send all messages
+          if (false) {  // removed: groups merged into messages
+            /* no-op */
           } else {
             await SmsService.sendAllMessages();
           }

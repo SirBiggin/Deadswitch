@@ -11,35 +11,21 @@ class DB {
 
   static Future<Database> _open() async {
     final path = join(await getDatabasesPath(), 'deadswitch.db');
-    return openDatabase(path, version: 2,
+    return openDatabase(path, version: 3,
       onCreate: (db, _) async {
-        await db.execute('''CREATE TABLE contacts(
+        await db.execute('''CREATE TABLE messages(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
-          phone TEXT NOT NULL,
           message TEXT NOT NULL DEFAULT '',
           created_at TEXT DEFAULT CURRENT_TIMESTAMP)''');
-        await db.execute('''CREATE TABLE tags(
+        await db.execute('''CREATE TABLE message_recipients(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT UNIQUE NOT NULL)''');
-        await db.execute('''CREATE TABLE contact_tags(
-          contact_id INTEGER NOT NULL,
-          tag_id INTEGER NOT NULL,
-          PRIMARY KEY(contact_id, tag_id))''');
-        await db.execute('''CREATE TABLE message_groups(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          message TEXT NOT NULL,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP)''');
-        await db.execute('''CREATE TABLE group_recipients(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          group_id INTEGER NOT NULL,
+          message_id INTEGER NOT NULL,
           name TEXT NOT NULL,
           phone TEXT NOT NULL)''');
         await db.execute('''CREATE TABLE pending_triggers(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           send_at TEXT NOT NULL,
-          group_id INTEGER,
           status TEXT NOT NULL DEFAULT 'pending')''');
         await db.execute('''CREATE TABLE trigger_log(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,6 +39,50 @@ class DB {
             group_id INTEGER NOT NULL,
             name TEXT NOT NULL,
             phone TEXT NOT NULL)''');
+        }
+        if (oldVersion < 3) {
+          await db.execute('''CREATE TABLE IF NOT EXISTS messages(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            message TEXT NOT NULL DEFAULT '',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP)''');
+          await db.execute('''CREATE TABLE IF NOT EXISTS message_recipients(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            phone TEXT NOT NULL)''');
+          // Migrate contacts (each becomes a message with one recipient)
+          final contacts = await db.query('contacts');
+          for (final c in contacts) {
+            final mid = await db.insert('messages', {
+              'name': c['name'],
+              'message': c['message'] ?? '',
+              'created_at': c['created_at'],
+            });
+            await db.insert('message_recipients', {
+              'message_id': mid,
+              'name': c['name'],
+              'phone': c['phone'],
+            });
+          }
+          // Migrate message_groups + group_recipients
+          final groups = await db.query('message_groups');
+          for (final g in groups) {
+            final mid = await db.insert('messages', {
+              'name': g['name'],
+              'message': g['message'] ?? '',
+              'created_at': g['created_at'],
+            });
+            final recs = await db.query('group_recipients',
+                where: 'group_id = ?', whereArgs: [g['id']]);
+            for (final r in recs) {
+              await db.insert('message_recipients', {
+                'message_id': mid,
+                'name': r['name'],
+                'phone': r['phone'],
+              });
+            }
+          }
         }
       },
     );

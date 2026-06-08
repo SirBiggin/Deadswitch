@@ -1,10 +1,8 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import '../services/trigger_service.dart';
 import '../db/database.dart';
 import 'messages_screen.dart';
-import 'groups_screen.dart';
 import 'settings_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -19,10 +17,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Timer? _timer;
 
   @override
-  void initState() {
-    super.initState();
-    _checkPending();
-  }
+  void initState() { super.initState(); _checkPending(); }
 
   Future<void> _checkPending() async {
     final at = await TriggerService.pendingSendAt();
@@ -63,11 +58,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _StatusCard(onRefresh: _checkPending),
         const SizedBox(height: 12),
-        _TriggerCard(
-          sendAt: _sendAt,
-          onInitiate: _initiate,
-          onAbort: _abort,
-        ),
+        _TriggerCard(sendAt: _sendAt, onInitiate: _initiate, onAbort: _abort),
       ]),
     );
   }
@@ -77,7 +68,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final screens = [
       _buildHome(),
       const MessagesScreen(),
-      const GroupsScreen(),
       const SettingsScreen(),
     ];
     return Scaffold(
@@ -91,9 +81,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onDestinationSelected: (i) => setState(() => _tab = i),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.dashboard), label: 'Dashboard'),
-          NavigationDestination(icon: Icon(Icons.message), label: 'Messages'),
-          NavigationDestination(icon: Icon(Icons.group), label: 'Groups'),
-          NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
+          NavigationDestination(icon: Icon(Icons.message),   label: 'Messages'),
+          NavigationDestination(icon: Icon(Icons.settings),  label: 'Settings'),
         ],
       ),
     );
@@ -108,25 +97,24 @@ class _StatusCard extends StatefulWidget {
 }
 
 class _StatusCardState extends State<_StatusCard> {
-  int _contactCount = 0;
+  int _msgCount = 0;
+  int _recipientCount = 0;
   String? _lastTrigger;
 
   @override
   void initState() { super.initState(); _load(); }
 
   Future<void> _load() async {
-    final db = await DB.instance;
-    final rows = await db.rawQuery("""
-      SELECT COUNT(*) FROM (
-        SELECT phone FROM contacts
-        UNION
-        SELECT phone FROM group_recipients
-      )""");
-    final count = rows.isNotEmpty ? (rows.first.values.first as int? ?? 0) : 0;
-    final log = await db.query('trigger_log', orderBy: 'id DESC', limit: 1);
+    final db    = await DB.instance;
+    final msgs  = await db.rawQuery('SELECT COUNT(*) as c FROM messages');
+    final recs  = await db.rawQuery('SELECT COUNT(*) as c FROM message_recipients');
+    final log   = await db.query('trigger_log', orderBy: 'id DESC', limit: 1);
     setState(() {
-      _contactCount = count;
-      _lastTrigger = log.isNotEmpty ? '${log.first['status']} — ${log.first['triggered_at']}' : null;
+      _msgCount       = (msgs.first['c'] as int? ?? 0);
+      _recipientCount = (recs.first['c'] as int? ?? 0);
+      _lastTrigger    = log.isNotEmpty
+          ? '${log.first['status']} — ${log.first['triggered_at']}'
+          : null;
     });
   }
 
@@ -137,7 +125,13 @@ class _StatusCardState extends State<_StatusCard> {
         padding: const EdgeInsets.all(16),
         child: Row(children: [
           Expanded(child: Column(children: [
-            Text('$_contactCount', style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.white)),
+            Text('$_msgCount', style: const TextStyle(
+                fontSize: 36, fontWeight: FontWeight.bold, color: Colors.white)),
+            const Text('Messages', style: TextStyle(color: Colors.grey, fontSize: 12)),
+          ])),
+          Expanded(child: Column(children: [
+            Text('$_recipientCount', style: const TextStyle(
+                fontSize: 36, fontWeight: FontWeight.bold, color: Colors.white)),
             const Text('Recipients', style: TextStyle(color: Colors.grey, fontSize: 12)),
           ])),
           Expanded(child: Column(children: [
@@ -174,9 +168,10 @@ class _TriggerCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: sendAt == null
             ? Column(children: [
-                const Text('Dead Switch', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                const Text('Dead Switch',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                 const SizedBox(height: 8),
-                const Text('Triggers all contacts and groups in 15 minutes.',
+                const Text('Triggers all messages in 15 minutes.',
                     style: TextStyle(color: Colors.grey, fontSize: 13), textAlign: TextAlign.center),
                 const SizedBox(height: 16),
                 SizedBox(
@@ -196,8 +191,8 @@ class _TriggerCard extends StatelessWidget {
             : Column(children: [
                 const Text('Sending in…', style: TextStyle(color: Colors.grey, fontSize: 13)),
                 const SizedBox(height: 4),
-                Text(_countdown(), style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold,
-                    color: Color(0xFFf0b04a), fontFeatures: [])),
+                Text(_countdown(), style: const TextStyle(fontSize: 48,
+                    fontWeight: FontWeight.bold, color: Color(0xFFf0b04a))),
                 const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
