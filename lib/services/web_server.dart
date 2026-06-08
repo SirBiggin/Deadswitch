@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:shelf/shelf.dart';
@@ -9,7 +8,11 @@ import 'package:shelf_router/shelf_router.dart';
 import '../db/database.dart';
 import 'settings_service.dart';
 import 'sms_service.dart';
+import 'web_portal_html.dart';
 
+// Entry point for the foreground task's background isolate.
+// Android keeps this isolate alive as long as the foreground service runs,
+// even when the app is backgrounded or the screen is off.
 @pragma('vm:entry-point')
 void webPortalTaskCallback() {
   FlutterForegroundTask.setTaskHandler(_WebPortalTaskHandler());
@@ -17,19 +20,24 @@ void webPortalTaskCallback() {
 
 class _WebPortalTaskHandler extends TaskHandler {
   @override
-  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {}
+  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
+    // HTTP server runs here — in the foreground service's own isolate.
+    // This isolate stays alive when the app is backgrounded.
+    await WebServer._startServer();
+  }
+
   @override
   void onRepeatEvent(DateTime timestamp) {}
+
   @override
-  Future<void> onDestroy(DateTime timestamp) async {}
+  Future<void> onDestroy(DateTime timestamp) async {
+    await WebServer._stopServer();
+  }
 }
 
 class WebServer {
   static HttpServer? _server;
   static const int port = 8080;
-  static String? _html;
-
-  static bool get isRunning => _server != null;
 
   static Future<String?> get localIp async {
     try {
@@ -46,9 +54,29 @@ class WebServer {
     return null;
   }
 
+  // Called from the main isolate — starts the foreground service,
+  // which spins up the background isolate and calls _startServer().
   static Future<void> start() async {
+    if (await FlutterForegroundTask.isRunningService) return;
+    final ip = await localIp;
+    final notifText = ip != null ? 'http://:' : 'Port ';
+    await FlutterForegroundTask.startService(
+      serviceId: 256,
+      notificationTitle: 'Web Portal Active',
+      notificationText: notifText,
+      callback: webPortalTaskCallback,
+    );
+  }
+
+  // Called from the main isolate to shut down the foreground service.
+  static Future<void> stop() async {
+    await FlutterForegroundTask.stopService();
+  }
+
+  // ── Internal — runs in the task handler isolate ───────────────────────────
+
+  static Future<void> _startServer() async {
     if (_server != null) return;
-    _html = await rootBundle.loadString('assets/web/index.html');
 
     final router = Router();
     router.get('/', _serveIndex);
@@ -69,22 +97,11 @@ class WebServer {
         .addHandler(router.call);
 
     _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, port);
-
-    final ip = await localIp;
-    final notifText = ip != null ? 'http://$ip:$port' : 'Port $port';
-    await FlutterForegroundTask.startService(
-      serviceId: 256,
-      notificationTitle: 'Web Portal Active',
-      notificationText: notifText,
-      callback: webPortalTaskCallback,
-    );
   }
 
-  static Future<void> stop() async {
-    await FlutterForegroundTask.stopService();
+  static Future<void> _stopServer() async {
     await _server?.close(force: true);
     _server = null;
-    _html = null;
   }
 
   // ── Middleware ────────────────────────────────────────────────────────────
@@ -108,7 +125,7 @@ class WebServer {
         final pin = await SettingsService.pin;
         if (pin.isEmpty) return h(req);
         final auth = req.headers['authorization'] ?? '';
-        if (auth != 'Bearer $pin') {
+        if (auth != 'Bearer ') {
           return Response.unauthorized(
             jsonEncode({'error': 'Unauthorized'}),
             headers: {'Content-Type': 'application/json'},
@@ -120,7 +137,7 @@ class WebServer {
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   static Response _serveIndex(Request req) =>
-      Response.ok(_html ?? '', headers: {'Content-Type': 'text/html; charset=utf-8'});
+      Response.ok(kWebPortalHtml, headers: {'Content-Type': 'text/html; charset=utf-8'});
 
   // Messages
   static Future<Response> _getMessages(Request req) async {
@@ -187,7 +204,7 @@ class WebServer {
     return _ok({'ok': true});
   }
 
-  // Phonebook
+  // Phonebook — flutter_contacts works in background isolate via BackgroundIsolateBinaryMessenger
   static Future<Response> _getPhonebook(Request req) async {
     try {
       final contacts = await FlutterContacts.getAll(
@@ -204,7 +221,7 @@ class WebServer {
           (a['name'] as String).compareTo(b['name'] as String));
       return _ok(result);
     } catch (e) {
-      return _ok(<String, dynamic>{'error': '$e'}, status: 500);
+      return _ok(<String, dynamic>{'error': ''}, status: 500);
     }
   }
 
@@ -228,7 +245,7 @@ class WebServer {
       final result = await SmsService.sendSms(to, 'DeadSwitch test message');
       return _ok(result);
     } catch (e) {
-      return _ok({'error': '$e'}, status: 500);
+      return _ok({'error': ''}, status: 500);
     }
   }
 
