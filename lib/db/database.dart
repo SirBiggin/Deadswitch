@@ -11,7 +11,7 @@ class DB {
 
   static Future<Database> _open() async {
     final path = join(await getDatabasesPath(), 'deadswitch.db');
-    return openDatabase(path, version: 3,
+    return openDatabase(path, version: 4,
       onCreate: (db, _) async {
         await db.execute('''CREATE TABLE messages(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,6 +83,16 @@ class DB {
               });
             }
           }
+        }
+        if (oldVersion < 4) {
+          // Remove duplicate recipients within the same message (keep lowest id per message_id+phone)
+          await db.execute('''
+            DELETE FROM message_recipients
+            WHERE id NOT IN (
+              SELECT MIN(id) FROM message_recipients
+              GROUP BY message_id, phone
+            )
+          ''');
         }
       },
     );

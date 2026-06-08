@@ -242,9 +242,15 @@ class _MessageFormScreenState extends State<_MessageFormScreen> {
               ),
             );
       if (phone == null || phone.isEmpty) return;
+      final normed = _norm(phone);
+      if (_recipients.any((r) => r['phone'] == normed)) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('That number is already in the list')));
+        return;
+      }
       setState(() => _recipients.add({
         'name':  picked.displayName ?? '',
-        'phone': _norm(phone),
+        'phone': normed,
       }));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
@@ -256,6 +262,11 @@ class _MessageFormScreenState extends State<_MessageFormScreen> {
     final name  = _manNameCtrl.text.trim();
     final phone = _norm(_manPhoneCtrl.text.trim());
     if (name.isEmpty || phone.isEmpty || phone == '+') return;
+    if (_recipients.any((r) => r['phone'] == phone)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('That number is already in the list')));
+      return;
+    }
     setState(() {
       _recipients.add({'name': name, 'phone': phone});
       _manNameCtrl.clear();
