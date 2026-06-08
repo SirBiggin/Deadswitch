@@ -52,14 +52,10 @@ class WebServer {
     final router = Router();
     router.get('/', _serveIndex);
     router.get('/favicon.ico', (Request r) => Response.notFound(''));
-    router.get('/api/contacts', _getContacts);
-    router.post('/api/contacts', _createContact);
-    router.put('/api/contacts/<id>', (Request r, String id) => _updateContact(r, id));
-    router.delete('/api/contacts/<id>', (Request r, String id) => _deleteContact(r, id));
-    router.get('/api/groups', _getGroups);
-    router.post('/api/groups', _createGroup);
-    router.put('/api/groups/<id>', (Request r, String id) => _updateGroup(r, id));
-    router.delete('/api/groups/<id>', (Request r, String id) => _deleteGroup(r, id));
+    router.get('/api/messages', _getMessages);
+    router.post('/api/messages', _createMessage);
+    router.put('/api/messages/<id>', (Request r, String id) => _updateMessage(r, id));
+    router.delete('/api/messages/<id>', (Request r, String id) => _deleteMessage(r, id));
     router.get('/api/settings', _getSettings);
     router.put('/api/settings', _updateSettings);
     router.post('/api/settings/test', _testSend);
@@ -89,6 +85,8 @@ class WebServer {
     _html = null;
   }
 
+  // ── Middleware ────────────────────────────────────────────────────────────
+
   static Middleware _corsMiddleware() => (h) => (req) async {
         if (req.method == 'OPTIONS') {
           return Response.ok('', headers: _corsHeaders);
@@ -117,98 +115,61 @@ class WebServer {
         return h(req);
       };
 
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
   static Response _serveIndex(Request req) =>
       Response.ok(_html ?? '', headers: {'Content-Type': 'text/html; charset=utf-8'});
 
-  static Future<Response> _getContacts(Request req) async {
+  // Messages
+  static Future<Response> _getMessages(Request req) async {
     final db = await DB.instance;
-    final rows = await db.query('contacts', orderBy: 'name');
-    return _ok(rows
-        .map((r) => {
-              'id': r['id'],
-              'name': r['name'],
-              'phone': r['phone'],
-              'message': r['message'],
-            })
-        .toList());
-  }
-
-  static Future<Response> _createContact(Request req) async {
-    final b = await _body(req);
-    final db = await DB.instance;
-    final id = await db.insert('contacts', {
-      'name': b['name'] ?? '',
-      'phone': b['phone'] ?? '',
-      'message': b['message'] ?? '',
-    });
-    return _ok({'id': id}, status: 201);
-  }
-
-  static Future<Response> _updateContact(Request req, String id) async {
-    final b = await _body(req);
-    final db = await DB.instance;
-    await db.update(
-      'contacts',
-      {'name': b['name'] ?? '', 'phone': b['phone'] ?? '', 'message': b['message'] ?? ''},
-      where: 'id = ?',
-      whereArgs: [int.parse(id)],
-    );
-    return _ok({'ok': true});
-  }
-
-  static Future<Response> _deleteContact(Request req, String id) async {
-    final db = await DB.instance;
-    await db.delete('contacts', where: 'id = ?', whereArgs: [int.parse(id)]);
-    return _ok({'ok': true});
-  }
-
-  static Future<Response> _getGroups(Request req) async {
-    final db = await DB.instance;
-    final groups = await db.query('message_groups', orderBy: 'name');
+    final msgs = await db.query('messages', orderBy: 'name ASC');
     final result = <Map<String, dynamic>>[];
-    for (final g in groups) {
-      final recs =
-          await db.query('group_recipients', where: 'group_id = ?', whereArgs: [g['id']]);
+    for (final m in msgs) {
+      final recs = await db.query('message_recipients',
+          where: 'message_id = ?', whereArgs: [m['id']]);
       result.add({
-        'id': g['id'],
-        'name': g['name'],
-        'message': g['message'],
-        'recipients': recs
-            .map((r) => {'id': r['id'], 'name': r['name'], 'phone': r['phone']})
-            .toList(),
+        'id': m['id'],
+        'name': m['name'],
+        'message': m['message'],
+        'recipients': recs.map((r) => {
+          'id': r['id'],
+          'name': r['name'],
+          'phone': r['phone'],
+        }).toList(),
       });
     }
     return _ok(result);
   }
 
-  static Future<Response> _createGroup(Request req) async {
+  static Future<Response> _createMessage(Request req) async {
     final b = await _body(req);
     final db = await DB.instance;
-    final gid = await db.insert('message_groups', {
+    final id = await db.insert('messages', {
       'name': b['name'] ?? '',
       'message': b['message'] ?? '',
     });
     for (final r in (b['recipients'] as List? ?? [])) {
-      await db.insert('group_recipients', {
-        'group_id': gid,
+      await db.insert('message_recipients', {
+        'message_id': id,
         'name': r['name'] ?? '',
         'phone': r['phone'] ?? '',
       });
     }
-    return _ok({'id': gid}, status: 201);
+    return _ok({'id': id}, status: 201);
   }
 
-  static Future<Response> _updateGroup(Request req, String id) async {
-    final gid = int.parse(id);
+  static Future<Response> _updateMessage(Request req, String id) async {
+    final mid = int.parse(id);
     final b = await _body(req);
     final db = await DB.instance;
-    await db.update('message_groups',
+    await db.update('messages',
         {'name': b['name'] ?? '', 'message': b['message'] ?? ''},
-        where: 'id = ?', whereArgs: [gid]);
-    await db.delete('group_recipients', where: 'group_id = ?', whereArgs: [gid]);
+        where: 'id = ?', whereArgs: [mid]);
+    await db.delete('message_recipients', where: 'message_id = ?', whereArgs: [mid]);
     for (final r in (b['recipients'] as List? ?? [])) {
-      await db.insert('group_recipients', {
-        'group_id': gid,
+      await db.insert('message_recipients', {
+        'message_id': mid,
         'name': r['name'] ?? '',
         'phone': r['phone'] ?? '',
       });
@@ -216,14 +177,15 @@ class WebServer {
     return _ok({'ok': true});
   }
 
-  static Future<Response> _deleteGroup(Request req, String id) async {
-    final gid = int.parse(id);
+  static Future<Response> _deleteMessage(Request req, String id) async {
+    final mid = int.parse(id);
     final db = await DB.instance;
-    await db.delete('group_recipients', where: 'group_id = ?', whereArgs: [gid]);
-    await db.delete('message_groups', where: 'id = ?', whereArgs: [gid]);
+    await db.delete('message_recipients', where: 'message_id = ?', whereArgs: [mid]);
+    await db.delete('messages', where: 'id = ?', whereArgs: [mid]);
     return _ok({'ok': true});
   }
 
+  // Settings
   static Future<Response> _getSettings(Request req) async => _ok({
         'httpsms_key': await SettingsService.httpsmsKey,
         'httpsms_from': await SettingsService.httpsmsFrom,
@@ -246,6 +208,8 @@ class WebServer {
       return _ok({'error': '$e'}, status: 500);
     }
   }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> _body(Request req) async =>
       jsonDecode(await req.readAsString()) as Map<String, dynamic>;
