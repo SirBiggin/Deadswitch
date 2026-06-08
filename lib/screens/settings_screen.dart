@@ -61,10 +61,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _fromCtrl.text    = from;
       _webPortalEnabled = portal;
       _webIp            = ip;
-      _countryCode      = code;
-      if (!_kCommonCodes.any((c) => c.$2 == code)) {
-        _customCodeCtrl.text = code;
-      }
+      _countryCode             = code;
+      _customCodeCtrl.text     = code;
     });
   }
 
@@ -285,58 +283,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _section('Country Code'),
           Card(child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text(
-                'Used to format phone numbers entered without a country code.',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-              const SizedBox(height: 12),
-              Wrap(spacing: 8, runSpacing: 8, children: _kCommonCodes.map((c) {
-                final selected = _countryCode == c.$2;
-                return ChoiceChip(
-                  label: Text('${c.$1}  +${c.$2}'),
-                  selected: selected,
-                  onSelected: (_) => _saveCountryCode(c.$2),
-                  selectedColor: const Color(0xFF2563eb),
-                  labelStyle: TextStyle(
-                    color: selected ? Colors.white : Colors.grey,
-                    fontSize: 12,
+            child: Row(children: [
+              const Text('+', style: TextStyle(color: Colors.grey, fontSize: 18)),
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 80,
+                child: TextField(
+                  controller: _customCodeCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    hintText: '1',
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                   ),
-                  backgroundColor: const Color(0xFF111111),
-                  side: BorderSide(
-                    color: selected ? const Color(0xFF2563eb) : const Color(0xFF333333),
-                  ),
-                );
-              }).toList()),
-              const SizedBox(height: 12),
-              Row(children: [
-                const Text('Other: +', style: TextStyle(color: Colors.grey, fontSize: 14)),
-                const SizedBox(width: 6),
-                SizedBox(
-                  width: 80,
-                  child: TextField(
-                    controller: _customCodeCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      hintText: '49',
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    ),
-                    onSubmitted: (v) {
-                      final code = v.replaceAll(RegExp(r'\D'), '');
-                      if (code.isNotEmpty) _saveCountryCode(code);
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                TextButton(
-                  onPressed: () {
-                    final code = _customCodeCtrl.text.replaceAll(RegExp(r'\D'), '');
+                  onSubmitted: (v) {
+                    final code = v.replaceAll(RegExp(r'\D'), '');
                     if (code.isNotEmpty) _saveCountryCode(code);
                   },
-                  child: const Text('Set'),
                 ),
-              ]),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Applied to numbers entered without a + prefix.',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ),
             ]),
           )),
           const SizedBox(height: 20),
