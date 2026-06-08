@@ -10,9 +10,9 @@ import 'settings_service.dart';
 import 'sms_service.dart';
 import 'web_portal_html.dart';
 
-// Entry point for the foreground task's background isolate.
+// Entry point for flutter_foreground_task's background isolate.
 // Android keeps this isolate alive as long as the foreground service runs,
-// even when the app is backgrounded or the screen is off.
+// even when the app is backgrounded or the screen sleeps.
 @pragma('vm:entry-point')
 void webPortalTaskCallback() {
   FlutterForegroundTask.setTaskHandler(_WebPortalTaskHandler());
@@ -21,9 +21,20 @@ void webPortalTaskCallback() {
 class _WebPortalTaskHandler extends TaskHandler {
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
-    // HTTP server runs here — in the foreground service's own isolate.
-    // This isolate stays alive when the app is backgrounded.
-    await WebServer._startServer();
+    try {
+      await WebServer._startServer();
+      final ip = await WebServer.localIp;
+      final text = ip != null
+          ? 'http://$ip:${WebServer.port}'
+          : 'Port ${WebServer.port}';
+      await FlutterForegroundTask.updateService(notificationText: text);
+    } catch (e) {
+      final msg = e.toString().replaceAll('\n', ' ');
+      await FlutterForegroundTask.updateService(
+        notificationTitle: 'Web Portal Error',
+        notificationText: msg.substring(0, msg.length.clamp(0, 80)),
+      );
+    }
   }
 
   @override
@@ -54,21 +65,19 @@ class WebServer {
     return null;
   }
 
-  // Called from the main isolate — starts the foreground service,
-  // which spins up the background isolate and calls _startServer().
+  // Called from the main isolate — starts the foreground service.
+  // The task handler's onStart() then starts the HTTP server inside
+  // the background isolate, which Android cannot pause.
   static Future<void> start() async {
     if (await FlutterForegroundTask.isRunningService) return;
-    final ip = await localIp;
-    final notifText = ip != null ? 'http://:' : 'Port ';
     await FlutterForegroundTask.startService(
       serviceId: 256,
-      notificationTitle: 'Web Portal Active',
-      notificationText: notifText,
+      notificationTitle: 'Web Portal',
+      notificationText: 'Starting…',
       callback: webPortalTaskCallback,
     );
   }
 
-  // Called from the main isolate to shut down the foreground service.
   static Future<void> stop() async {
     await FlutterForegroundTask.stopService();
   }
@@ -125,7 +134,7 @@ class WebServer {
         final pin = await SettingsService.pin;
         if (pin.isEmpty) return h(req);
         final auth = req.headers['authorization'] ?? '';
-        if (auth != 'Bearer ') {
+        if (auth != 'Bearer $pin') {
           return Response.unauthorized(
             jsonEncode({'error': 'Unauthorized'}),
             headers: {'Content-Type': 'application/json'},
@@ -137,9 +146,9 @@ class WebServer {
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   static Response _serveIndex(Request req) =>
-      Response.ok(kWebPortalHtml, headers: {'Content-Type': 'text/html; charset=utf-8'});
+      Response.ok(kWebPortalHtml,
+          headers: {'Content-Type': 'text/html; charset=utf-8'});
 
-  // Messages
   static Future<Response> _getMessages(Request req) async {
     final db = await DB.instance;
     final msgs = await db.query('messages', orderBy: 'name ASC');
@@ -151,11 +160,9 @@ class WebServer {
         'id': m['id'],
         'name': m['name'],
         'message': m['message'],
-        'recipients': recs.map((r) => {
-          'id': r['id'],
-          'name': r['name'],
-          'phone': r['phone'],
-        }).toList(),
+        'recipients': recs
+            .map((r) => {'id': r['id'], 'name': r['name'], 'phone': r['phone']})
+            .toList(),
       });
     }
     return _ok(result);
@@ -185,7 +192,8 @@ class WebServer {
     await db.update('messages',
         {'name': b['name'] ?? '', 'message': b['message'] ?? ''},
         where: 'id = ?', whereArgs: [mid]);
-    await db.delete('message_recipients', where: 'message_id = ?', whereArgs: [mid]);
+    await db.delete('message_recipients',
+        where: 'message_id = ?', whereArgs: [mid]);
     for (final r in (b['recipients'] as List? ?? [])) {
       await db.insert('message_recipients', {
         'message_id': mid,
@@ -199,16 +207,16 @@ class WebServer {
   static Future<Response> _deleteMessage(Request req, String id) async {
     final mid = int.parse(id);
     final db = await DB.instance;
-    await db.delete('message_recipients', where: 'message_id = ?', whereArgs: [mid]);
+    await db.delete('message_recipients',
+        where: 'message_id = ?', whereArgs: [mid]);
     await db.delete('messages', where: 'id = ?', whereArgs: [mid]);
     return _ok({'ok': true});
   }
 
-  // Phonebook — flutter_contacts works in background isolate via BackgroundIsolateBinaryMessenger
   static Future<Response> _getPhonebook(Request req) async {
     try {
-      final contacts = await FlutterContacts.getAll(
-          properties: {ContactProperty.phone});
+      final contacts =
+          await FlutterContacts.getAll(properties: {ContactProperty.phone});
       final result = <Map<String, dynamic>>[];
       for (final c in contacts) {
         if (c.phones.isEmpty) continue;
@@ -217,15 +225,14 @@ class WebServer {
           'phones': c.phones.map((p) => p.number).toList(),
         });
       }
-      result.sort((a, b) =>
-          (a['name'] as String).compareTo(b['name'] as String));
+      result.sort(
+          (a, b) => (a['name'] as String).compareTo(b['name'] as String));
       return _ok(result);
     } catch (e) {
-      return _ok(<String, dynamic>{'error': ''}, status: 500);
+      return _ok(<String, dynamic>{'error': '$e'}, status: 500);
     }
   }
 
-  // Settings
   static Future<Response> _getSettings(Request req) async => _ok({
         'httpsms_key': await SettingsService.httpsmsKey,
         'httpsms_from': await SettingsService.httpsmsFrom,
@@ -233,8 +240,12 @@ class WebServer {
 
   static Future<Response> _updateSettings(Request req) async {
     final b = await _body(req);
-    if (b['httpsms_key'] != null) await SettingsService.setHttpsmsKey(b['httpsms_key']);
-    if (b['httpsms_from'] != null) await SettingsService.setHttpsmsFrom(b['httpsms_from']);
+    if (b['httpsms_key'] != null) {
+      await SettingsService.setHttpsmsKey(b['httpsms_key']);
+    }
+    if (b['httpsms_from'] != null) {
+      await SettingsService.setHttpsmsFrom(b['httpsms_from']);
+    }
     return _ok({'ok': true});
   }
 
@@ -245,7 +256,7 @@ class WebServer {
       final result = await SmsService.sendSms(to, 'DeadSwitch test message');
       return _ok(result);
     } catch (e) {
-      return _ok({'error': ''}, status: 500);
+      return _ok({'error': '$e'}, status: 500);
     }
   }
 
