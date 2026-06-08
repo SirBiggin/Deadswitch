@@ -17,7 +17,8 @@ class TriggerService {
       taskName, taskName,
       tag: _taskTag,
       initialDelay: const Duration(minutes: delayMinutes),
-      constraints: Constraints(networkType: NetworkType.connected),
+      // No networkType constraint — SMS fails gracefully if offline,
+      // but a missing constraint lets Samsung actually schedule the task.
     );
     return sendAt;
   }
