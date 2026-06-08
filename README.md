@@ -98,7 +98,10 @@ flutter build apk --release
 
 The release APK will be at `build/app/outputs/flutter-apk/app-release.apk`.
 
-> `android/local.properties` is not included in the repo (machine-specific). Flutter generates it automatically when you run `flutter build` with a valid Android SDK installed.
+> **Notes:**
+> - `android/local.properties` is not included (machine-specific). Flutter generates it automatically on first build.
+> - `gradle-wrapper.jar` is not included (auto-generated binary). Gradle downloads it automatically on first build — an internet connection is required the first time.
+> - `gradlew` / `gradlew.bat` are included for anyone building manually outside of Flutter's toolchain.
 
 ---
 
