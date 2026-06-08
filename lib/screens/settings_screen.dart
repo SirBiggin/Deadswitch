@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/settings_service.dart';
 import '../services/sms_service.dart';
 import '../services/web_server.dart';
@@ -221,11 +222,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const Text('Open this URL in your browser:',
                     style: TextStyle(color: Colors.grey, fontSize: 12)),
                 const SizedBox(height: 6),
-                SelectableText(
-                  _webIp != null ? 'http://$_webIp:${WebServer.port}' : 'Getting IP…',
-                  style: const TextStyle(
-                      color: Color(0xFF7eb8f7), fontSize: 14, fontFamily: 'monospace'),
-                ),
+                Row(children: [
+                  Expanded(
+                    child: SelectableText(
+                      _webIp != null ? 'http://$_webIp:${WebServer.port}' : 'Getting IP…',
+                      style: const TextStyle(
+                          color: Color(0xFF7eb8f7), fontSize: 14, fontFamily: 'monospace'),
+                    ),
+                  ),
+                  if (_webIp != null)
+                    IconButton(
+                      icon: const Icon(Icons.copy, size: 18, color: Color(0xFF7eb8f7)),
+                      tooltip: 'Copy to clipboard',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () {
+                        final url = 'http://$_webIp:${WebServer.port}';
+                        Clipboard.setData(ClipboardData(text: url));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('URL copied to clipboard'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                    ),
+                ]),
                 const SizedBox(height: 8),
                 const Text(
                   'Your app PIN is required to access the portal. '
@@ -251,7 +273,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               _infoRow('App', 'DeadSwitch'),
-              _infoRow('Version', '1.2.5'),
+              _infoRow('Version', '1.2.6'),
               _infoRow('SMS Provider', 'httpsms.com'),
               const SizedBox(height: 8),
               const Text(
