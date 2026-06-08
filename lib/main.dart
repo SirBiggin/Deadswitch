@@ -6,6 +6,7 @@ import 'db/database.dart';
 import 'services/sms_service.dart';
 import 'services/trigger_service.dart';
 import 'services/settings_service.dart';
+import 'services/notification_service.dart';
 import 'services/web_server.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
@@ -20,6 +21,7 @@ void callbackDispatcher() {
         final due = await db.query('pending_triggers',
             where: "status = 'pending' AND send_at <= ?",
             whereArgs: [DateTime.now().toUtc().toIso8601String()]);
+        bool processed = false;
         for (final row in due) {
           try {
             await SmsService.sendAllMessages();
@@ -31,6 +33,10 @@ void callbackDispatcher() {
                 where: 'id = ?', whereArgs: [row['id']]);
             await db.insert('trigger_log', {'status': 'error'});
           }
+          processed = true;
+        }
+        if (processed) {
+          try { await NotificationService.cancelCountdown(); } catch (_) {}
         }
       }
     } catch (_) {
@@ -64,6 +70,9 @@ void main() async {
     runApp(_CrashScreen(error: d.exception, stack: d.stack ?? StackTrace.empty));
   };
   await runZonedGuarded(() async {
+    try {
+      await NotificationService.init();
+    } catch (_) {}
     try {
       await Workmanager().initialize(callbackDispatcher);
     } catch (_) {}

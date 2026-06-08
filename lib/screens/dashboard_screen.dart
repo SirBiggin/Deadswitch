@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/trigger_service.dart';
+import '../services/notification_service.dart';
+import '../services/settings_service.dart';
 import '../db/database.dart';
+import 'login_screen.dart';
 import 'messages_screen.dart';
 import 'settings_screen.dart';
 
@@ -16,6 +19,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   int _tab = 0;
   DateTime? _sendAt;
   Timer? _timer;
+  DateTime? _pausedAt;
 
   @override
   void initState() {
@@ -26,13 +30,36 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _checkPending();
+    if (state == AppLifecycleState.paused) {
+      _pausedAt = DateTime.now();
+    } else if (state == AppLifecycleState.resumed) {
+      _checkPending();
+      final paused = _pausedAt;
+      _pausedAt = null;
+      if (paused != null && DateTime.now().difference(paused).inSeconds >= 5) {
+        _maybeRequireReauth();
+      }
+    }
+  }
+
+  Future<void> _maybeRequireReauth() async {
+    final hasPin = await SettingsService.hasPin;
+    if (!hasPin || !mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => const LoginScreen(isReauth: true),
+    ));
   }
 
   Future<void> _checkPending() async {
     final at = await TriggerService.pendingSendAt();
+    if (!mounted) return;
     setState(() => _sendAt = at);
-    if (at != null) _startTimer();
+    if (at != null) {
+      _startTimer();
+    } else {
+      NotificationService.cancelCountdown();
+    }
   }
 
   void _startTimer() {
@@ -41,6 +68,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (_sendAt != null && DateTime.now().isAfter(_sendAt!)) {
         setState(() => _sendAt = null);
         _timer?.cancel();
+        NotificationService.cancelCountdown();
       } else {
         setState(() {});
       }

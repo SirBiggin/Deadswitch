@@ -1,5 +1,6 @@
 import 'package:workmanager/workmanager.dart';
 import '../db/database.dart';
+import 'notification_service.dart';
 
 class TriggerService {
   static const taskName    = 'deadswitch_send';
@@ -17,9 +18,8 @@ class TriggerService {
       taskName, taskName,
       tag: _taskTag,
       initialDelay: const Duration(minutes: delayMinutes),
-      // No networkType constraint — SMS fails gracefully if offline,
-      // but a missing constraint lets Samsung actually schedule the task.
     );
+    await NotificationService.showCountdown(sendAt);
     return sendAt;
   }
 
@@ -28,6 +28,7 @@ class TriggerService {
     await db.update('pending_triggers', {'status': 'cancelled'},
         where: "status = 'pending'");
     await Workmanager().cancelByTag(_taskTag);
+    await NotificationService.cancelCountdown();
   }
 
   static Future<DateTime?> pendingSendAt() async {
