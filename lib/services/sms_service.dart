@@ -4,17 +4,17 @@ import '../db/database.dart';
 import 'settings_service.dart';
 
 class SmsService {
-  static Future<String> _normalizePhone(String phone) {
+  static String _normalizePhone(String phone) {
     final digits = phone.replaceAll(RegExp(r'\D'), '');
-    if (digits.length == 10) return Future.value('+1$digits');
-    if (digits.length == 11 && digits.startsWith('1')) return Future.value('+$digits');
-    return Future.value(phone.startsWith('+') ? phone : '+$digits');
+    if (digits.length == 10) return '+1$digits';
+    if (digits.length == 11 && digits.startsWith('1')) return '+$digits';
+    return phone.startsWith('+') ? phone : '+$digits';
   }
 
   static Future<Map<String, dynamic>> sendSms(String to, String message) async {
     final key  = await SettingsService.httpsmsKey;
-    final from = await _normalizePhone(await SettingsService.httpsmsFrom);
-    final normalizedTo = await _normalizePhone(to);
+    final from = _normalizePhone(await SettingsService.httpsmsFrom);
+    final normalizedTo = _normalizePhone(to);
     final res = await http.post(
       Uri.parse('https://api.httpsms.com/v1/messages/send'),
       headers: {'x-api-key': key, 'Content-Type': 'application/json'},
@@ -25,66 +25,30 @@ class SmsService {
 
   static Future<List<Map<String, dynamic>>> sendAllMessages() async {
     final db = await DB.instance;
-    final contacts = await db.query('contacts');
+    final messages = await db.query('messages');
     final results = <Map<String, dynamic>>[];
-    for (final c in contacts) {
-      try {
-        final phone = await _normalizePhone(c['phone'] as String);
-        final resp = await sendSms(phone, c['message'] as String);
-        results.add({
-          'contact': c['name'],
-          'status': resp['status'] == 'success' ? 'sent' : 'failed',
-          'detail': resp['message'] ?? '',
-        });
-      } catch (e) {
-        results.add({'contact': c['name'], 'status': 'failed', 'detail': '$e'});
-      }
-    }
-    return results;
-  }
-
-  static Future<List<Map<String, dynamic>>> sendGroup(int groupId) async {
-    final db = await DB.instance;
-    final group = (await db.query('message_groups',
-        where: 'id = ?', whereArgs: [groupId])).firstOrNull;
-    if (group == null) return [];
-    final rows = await db.query('group_recipients',
-        where: 'group_id = ?', whereArgs: [groupId]);
-    final results = <Map<String, dynamic>>[];
-    for (final c in rows) {
-      try {
-        final phone = await _normalizePhone(c['phone'] as String);
-        final resp = await sendSms(phone, group['message'] as String);
-        results.add({
-          'contact': c['name'],
-          'status': resp['status'] == 'success' ? 'sent' : 'failed',
-          'detail': resp['message'] ?? '',
-        });
-      } catch (e) {
-        results.add({'contact': c['name'], 'status': 'failed', 'detail': '$e'});
-      }
-    }
-    return results;
-  }
-
-  // Returns list of error strings; empty = all succeeded
-  static Future<List<String>> sendAdHoc(List<int> contactIds, String message) async {
-    final db = await DB.instance;
-    final errors = <String>[];
-    for (final cid in contactIds) {
-      final rows = await db.query('contacts', where: 'id = ?', whereArgs: [cid]);
-      if (rows.isEmpty) continue;
-      final name = rows.first['name'] as String;
-      try {
-        final phone = await _normalizePhone(rows.first['phone'] as String);
-        final resp = await sendSms(phone, message);
-        if (resp['status'] == 'error') {
-          errors.add('$name: ${resp['message'] ?? resp.toString()}');
+    for (final m in messages) {
+      final recipients = await db.query('message_recipients',
+          where: 'message_id = ?', whereArgs: [m['id']]);
+      for (final r in recipients) {
+        try {
+          final resp = await sendSms(r['phone'] as String, m['message'] as String);
+          results.add({
+            'label':   m['name'],
+            'contact': r['name'],
+            'status':  resp['status'] == 'success' ? 'sent' : 'failed',
+            'detail':  resp['message'] ?? '',
+          });
+        } catch (e) {
+          results.add({
+            'label':   m['name'],
+            'contact': r['name'] as String,
+            'status':  'failed',
+            'detail':  '$e',
+          });
         }
-      } catch (e) {
-        errors.add('$name: $e');
       }
     }
-    return errors;
+    return results;
   }
 }

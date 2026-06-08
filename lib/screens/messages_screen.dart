@@ -10,185 +10,285 @@ class MessagesScreen extends StatefulWidget {
 
 class _MessagesScreenState extends State<MessagesScreen> {
   List<Map<String, dynamic>> _messages = [];
+  bool _loading = true;
 
   @override
   void initState() { super.initState(); _load(); }
 
   Future<void> _load() async {
-    final db = await DB.instance;
-    final rows = await db.query('contacts', orderBy: 'name ASC');
-    setState(() => _messages = rows);
+    setState(() => _loading = true);
+    final db   = await DB.instance;
+    final msgs = await db.query('messages', orderBy: 'name ASC');
+    final result = <Map<String, dynamic>>[];
+    for (final m in msgs) {
+      final recs = await db.query('message_recipients',
+          where: 'message_id = ?', whereArgs: [m['id']]);
+      result.add({...m, 'recipients': List<Map<String, dynamic>>.from(recs)});
+    }
+    if (mounted) setState(() { _messages = result; _loading = false; });
   }
 
-  Future<void> _delete(int id) async {
+  Future<void> _delete(int id, String name) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1a1a1a),
+        title: const Text('Delete Message?', style: TextStyle(color: Colors.white)),
+        content: Text('Delete $name?', style: const TextStyle(color: Colors.grey)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFc87e7e)),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
     final db = await DB.instance;
-    await db.delete('contacts', where: 'id = ?', whereArgs: [id]);
+    await db.delete('message_recipients', where: 'message_id = ?', whereArgs: [id]);
+    await db.delete('messages', where: 'id = ?', whereArgs: [id]);
     _load();
   }
 
   void _openForm([Map<String, dynamic>? existing]) {
     Navigator.push(context, MaterialPageRoute(
-      builder: (_) => MessageFormScreen(existing: existing),
+      builder: (_) => _MessageFormScreen(existing: existing),
     )).then((_) => _load());
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Individual Messages'),
-        actions: [
-          IconButton(icon: const Icon(Icons.add), onPressed: () => _openForm()),
-        ],
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _openForm(),
+        child: const Icon(Icons.add),
       ),
-      body: _messages.isEmpty
-          ? const Center(
-              child: Text('No messages yet.\nTap + to create one.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey, fontSize: 14)),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: _messages.length,
-              itemBuilder: (_, i) {
-                final m = _messages[i];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: Row(children: [
-                      Expanded(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(m['name'] as String,
-                              style: const TextStyle(color: Colors.white,
-                                  fontWeight: FontWeight.bold, fontSize: 15)),
-                          const SizedBox(height: 2),
-                          Text(m['phone'] as String,
-                              style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                          const SizedBox(height: 6),
-                          Text(m['message'] as String,
-                              style: const TextStyle(color: Color(0xFFaaaaaa), fontSize: 13),
-                              maxLines: 2, overflow: TextOverflow.ellipsis),
-                        ]),
-                      ),
-                      Column(children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.grey, size: 20),
-                          onPressed: () => _openForm(m),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: Color(0xFFc87e7e), size: 20),
-                          onPressed: () async {
-                            final ok = await showDialog<bool>(
-                              context: context,
-                              builder: (_) => AlertDialog(
-                                backgroundColor: const Color(0xFF1a1a1a),
-                                title: const Text('Delete message?',
-                                    style: TextStyle(color: Colors.white)),
-                                content: Text('To: ${m["name"]}',
-                                    style: const TextStyle(color: Colors.grey)),
-                                actions: [
-                                  TextButton(onPressed: () => Navigator.pop(context, false),
-                                      child: const Text('Cancel')),
-                                  TextButton(onPressed: () => Navigator.pop(context, true),
-                                      child: const Text('Delete',
-                                          style: TextStyle(color: Color(0xFFc87e7e)))),
-                                ],
-                              ),
-                            );
-                            if (ok == true) _delete(m['id'] as int);
-                          },
-                        ),
-                      ]),
-                    ]),
-                  ),
-                );
-              },
-            ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _messages.isEmpty
+              ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.message_outlined, color: Colors.grey, size: 52),
+                  const SizedBox(height: 12),
+                  const Text('No messages configured.',
+                      style: TextStyle(color: Colors.grey, fontSize: 14)),
+                  const SizedBox(height: 4),
+                  const Text('Tap + to create one.',
+                      style: TextStyle(color: Color(0xFF555555), fontSize: 12)),
+                ]))
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+                  itemCount: _messages.length,
+                  itemBuilder: (_, i) {
+                    final m = _messages[i];
+                    return _MessageCard(
+                      data: m,
+                      onEdit:   () => _openForm(m),
+                      onDelete: () => _delete(m['id'] as int, m['name'] as String),
+                    );
+                  },
+                ),
     );
   }
 }
 
-class MessageFormScreen extends StatefulWidget {
-  final Map<String, dynamic>? existing;
-  const MessageFormScreen({super.key, this.existing});
+class _MessageCard extends StatelessWidget {
+  final Map<String, dynamic> data;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  const _MessageCard({required this.data, required this.onEdit, required this.onDelete});
+
   @override
-  State<MessageFormScreen> createState() => _MessageFormScreenState();
+  Widget build(BuildContext context) {
+    final recipients = (data['recipients'] as List<Map<String, dynamic>>? ?? []);
+    final count      = recipients.length;
+    final names      = recipients.map((r) => r['name'] as String).join(', ');
+    final message    = data['message'] as String? ?? '';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onEdit,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(data['name'] as String,
+                  style: const TextStyle(color: Colors.white,
+                      fontWeight: FontWeight.w600, fontSize: 15)),
+              const SizedBox(height: 4),
+              Row(children: [
+                const Icon(Icons.people, size: 13, color: Color(0xFF2563eb)),
+                const SizedBox(width: 4),
+                Expanded(child: Text(
+                  count == 0
+                      ? 'No recipients'
+                      : '$count recipient${count == 1 ? '' : 's'}: $names',
+                  style: const TextStyle(color: Color(0xFF888888), fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                )),
+              ]),
+              if (message.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(message,
+                    style: const TextStyle(color: Color(0xFF666666), fontSize: 12),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
+              ],
+            ])),
+            Column(mainAxisSize: MainAxisSize.min, children: [
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF888888)),
+                onPressed: onEdit,
+                tooltip: 'Edit',
+                padding: const EdgeInsets.all(6),
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(height: 4),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFF884444)),
+                onPressed: onDelete,
+                tooltip: 'Delete',
+                padding: const EdgeInsets.all(6),
+                constraints: const BoxConstraints(),
+              ),
+            ]),
+          ]),
+        ),
+      ),
+    );
+  }
 }
 
-class _MessageFormScreenState extends State<MessageFormScreen> {
-  final _nameCtrl  = TextEditingController();
-  final _phoneCtrl = TextEditingController();
-  final _msgCtrl   = TextEditingController();
-  bool _saving = false;
+// ─── Add / Edit Form ─────────────────────────────────────────────────────────
+
+class _MessageFormScreen extends StatefulWidget {
+  final Map<String, dynamic>? existing;
+  const _MessageFormScreen({this.existing});
+  @override
+  State<_MessageFormScreen> createState() => _MessageFormScreenState();
+}
+
+class _MessageFormScreenState extends State<_MessageFormScreen> {
+  final _nameCtrl     = TextEditingController();
+  final _msgCtrl      = TextEditingController();
+  final _manNameCtrl  = TextEditingController();
+  final _manPhoneCtrl = TextEditingController();
+  List<Map<String, String>> _recipients = [];
+  bool _showManual = false;
+  bool _saving     = false;
 
   @override
   void initState() {
     super.initState();
     if (widget.existing != null) {
-      _nameCtrl.text  = widget.existing!['name']    as String? ?? '';
-      _phoneCtrl.text = widget.existing!['phone']   as String? ?? '';
-      _msgCtrl.text   = widget.existing!['message'] as String? ?? '';
+      _nameCtrl.text = widget.existing!['name']    as String? ?? '';
+      _msgCtrl.text  = widget.existing!['message'] as String? ?? '';
+      final recs = widget.existing!['recipients'] as List<Map<String, dynamic>>? ?? [];
+      _recipients = recs.map((r) => {
+        'name':  r['name']  as String,
+        'phone': r['phone'] as String,
+      }).toList();
     }
   }
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
-    _phoneCtrl.dispose();
-    _msgCtrl.dispose();
+    _nameCtrl.dispose(); _msgCtrl.dispose();
+    _manNameCtrl.dispose(); _manPhoneCtrl.dispose();
     super.dispose();
+  }
+
+  String _norm(String phone) {
+    final d = phone.replaceAll(RegExp(r'\D'), '');
+    if (d.length == 10) return '+1$d';
+    if (d.length == 11 && d.startsWith('1')) return '+$d';
+    return phone.startsWith('+') ? phone : '+$d';
   }
 
   Future<void> _pickContact() async {
     try {
-      await FlutterContacts.permissions.request(PermissionType.read);
-      if (!mounted) return;
-      final contacts = await FlutterContacts.getAll(properties: {ContactProperty.phone});
+      final status = await FlutterContacts.permissions.request(PermissionType.read);
+      if (status != PermissionStatus.granted && status != PermissionStatus.limited) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Contacts permission denied')));
+        return;
+      }
+      final contacts = await FlutterContacts.getAll(
+          properties: {ContactProperty.phone});
       if (!mounted) return;
       final picked = await showDialog<Contact>(
         context: context,
         builder: (_) => _ContactPickerDialog(contacts: contacts),
       );
-      if (picked != null && picked.phones.isNotEmpty) {
-        final dn = picked.displayName ?? '';
-        _nameCtrl.text  = dn.isNotEmpty ? dn
-            : '${picked.name?.first ?? ''} ${picked.name?.last ?? ''}'.trim();
-        _phoneCtrl.text = picked.phones.first.number;
-      }
-    } catch (_) {}
+      if (picked == null || picked.phones.isEmpty) return;
+      final phone = picked.phones.length == 1
+          ? picked.phones.first.number
+          : await showDialog<String>(
+              context: context,
+              builder: (_) => AlertDialog(
+                backgroundColor: const Color(0xFF1a1a1a),
+                title: const Text('Select Number', style: TextStyle(color: Colors.white)),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: picked.phones.map((p) => ListTile(
+                    title: Text(p.number, style: const TextStyle(color: Colors.white)),
+                    onTap: () => Navigator.pop(context, p.number),
+                  )).toList(),
+                ),
+              ),
+            );
+      if (phone == null || phone.isEmpty) return;
+      setState(() => _recipients.add({
+        'name':  picked.displayName ?? '',
+        'phone': _norm(phone),
+      }));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error picking contact: $e')));
+    }
+  }
+
+  void _addManual() {
+    final name  = _manNameCtrl.text.trim();
+    final phone = _norm(_manPhoneCtrl.text.trim());
+    if (name.isEmpty || phone.isEmpty || phone == '+') return;
+    setState(() {
+      _recipients.add({'name': name, 'phone': phone});
+      _manNameCtrl.clear();
+      _manPhoneCtrl.clear();
+      _showManual = false;
+    });
   }
 
   Future<void> _save() async {
-    final name  = _nameCtrl.text.trim();
-    final phone = _phoneCtrl.text.trim();
+    final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Enter a recipient name')));
-      return;
-    }
-    if (phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Enter a phone number')));
-      return;
-    }
-    if (_msgCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Message cannot be empty')));
+          const SnackBar(content: Text('Enter a name for this message')));
       return;
     }
     setState(() => _saving = true);
-    final db = await DB.instance;
-    final data = {
-      'name':    name,
-      'phone':   phone,
-      'message': _msgCtrl.text.trim(),
-    };
-    if (widget.existing != null) {
-      await db.update('contacts', data,
-          where: 'id = ?', whereArgs: [widget.existing!['id']]);
+    final db      = await DB.instance;
+    final payload = {'name': name, 'message': _msgCtrl.text.trim()};
+    final existing = widget.existing;
+    if (existing != null) {
+      final id = existing['id'] as int;
+      await db.update('messages', payload, where: 'id = ?', whereArgs: [id]);
+      await db.delete('message_recipients', where: 'message_id = ?', whereArgs: [id]);
+      for (final r in _recipients) {
+        await db.insert('message_recipients',
+            {'message_id': id, 'name': r['name'], 'phone': r['phone']});
+      }
     } else {
-      await db.insert('contacts', data);
+      final id = await db.insert('messages', payload);
+      for (final r in _recipients) {
+        await db.insert('message_recipients',
+            {'message_id': id, 'name': r['name'], 'phone': r['phone']});
+      }
     }
     if (mounted) Navigator.pop(context);
   }
@@ -197,62 +297,154 @@ class _MessageFormScreenState extends State<MessageFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.existing == null ? 'New Message' : 'Edit Message'),
+        title: Text(widget.existing != null ? 'Edit Message' : 'New Message'),
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : _save,
+            child: _saving
+                ? const SizedBox(width: 16, height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Text('Save',
+                    style: TextStyle(color: Color(0xFF7eb8f7), fontWeight: FontWeight.w600)),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('RECIPIENT', style: TextStyle(color: Colors.grey, fontSize: 11,
-              letterSpacing: 1.2)),
-          const SizedBox(height: 8),
+
           TextField(
             controller: _nameCtrl,
             textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(labelText: 'Name'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _phoneCtrl,
-            keyboardType: TextInputType.phone,
-            decoration: InputDecoration(
-              labelText: 'Phone number',
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.person_search, color: Colors.grey),
-                tooltip: 'Pick from contacts',
-                onPressed: _pickContact,
-              ),
+            decoration: const InputDecoration(
+              labelText: 'Name',
+              hintText: 'e.g. Family, Work, Emergency',
             ),
           ),
-          const SizedBox(height: 24),
-          const Text('MESSAGE', style: TextStyle(color: Colors.grey, fontSize: 11,
-              letterSpacing: 1.2)),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
           TextField(
             controller: _msgCtrl,
-            maxLines: 7,
+            maxLines: 5,
             decoration: const InputDecoration(
-              hintText: 'What should this person receive if you go silent?',
+              labelText: 'Message to send',
+              hintText: 'What gets sent when the switch triggers…',
               alignLabelWithHint: true,
             ),
           ),
-          const SizedBox(height: 28),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _saving ? null : _save,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2563eb),
-                padding: const EdgeInsets.symmetric(vertical: 15),
+          const SizedBox(height: 24),
+
+          // ── Recipients ─────────────────────────────────────────────────
+          Row(children: [
+            const Text('RECIPIENTS',
+                style: TextStyle(color: Colors.grey, fontSize: 11,
+                    fontWeight: FontWeight.w600, letterSpacing: 1.0)),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: _pickContact,
+              icon: const Icon(Icons.contacts_outlined, size: 15),
+              label: const Text('Contacts', style: TextStyle(fontSize: 13)),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF7eb8f7),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: Text(widget.existing == null ? 'Save Message' : 'Update Message',
-                  style: const TextStyle(color: Colors.white, fontSize: 15)),
             ),
-          ),
+            const SizedBox(width: 4),
+            TextButton.icon(
+              onPressed: () => setState(() => _showManual = !_showManual),
+              icon: const Icon(Icons.edit_outlined, size: 15),
+              label: const Text('Manual', style: TextStyle(fontSize: 13)),
+              style: TextButton.styleFrom(
+                foregroundColor: _showManual
+                    ? const Color(0xFFf59e0b)
+                    : const Color(0xFF7eb8f7),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ]),
+
+          if (_showManual) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF111111),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF333333)),
+              ),
+              child: Row(children: [
+                Expanded(child: TextField(
+                  controller: _manNameCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Name', isDense: true,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  ),
+                )),
+                const SizedBox(width: 8),
+                Expanded(child: TextField(
+                  controller: _manPhoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone', isDense: true,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  ),
+                )),
+                IconButton(
+                  onPressed: _addManual,
+                  icon: const Icon(Icons.add_circle, color: Color(0xFF2563eb), size: 28),
+                  tooltip: 'Add',
+                  padding: const EdgeInsets.only(left: 6),
+                  constraints: const BoxConstraints(),
+                ),
+              ]),
+            ),
+          ],
+
+          const SizedBox(height: 8),
+          if (_recipients.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 10),
+              child: Text('No recipients yet. Add from Contacts or enter manually.',
+                  style: TextStyle(color: Color(0xFF555555), fontSize: 12)),
+            )
+          else
+            ..._recipients.asMap().entries.map((e) {
+              final i = e.key;
+              final r = e.value;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF111111),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF2a2a2a)),
+                ),
+                child: ListTile(
+                  dense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                  title: Text(r['name']!,
+                      style: const TextStyle(color: Colors.white, fontSize: 14)),
+                  subtitle: Text(r['phone']!,
+                      style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.close, size: 18, color: Color(0xFF884444)),
+                    onPressed: () => setState(() => _recipients.removeAt(i)),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Remove',
+                  ),
+                ),
+              );
+            }),
+
         ]),
       ),
     );
   }
 }
+
+// ─── Contact Picker Dialog ────────────────────────────────────────────────────
 
 class _ContactPickerDialog extends StatefulWidget {
   final List<Contact> contacts;
@@ -268,8 +460,8 @@ class _ContactPickerDialogState extends State<_ContactPickerDialog> {
   Widget build(BuildContext context) {
     final filtered = widget.contacts
         .where((c) =>
-            (c.displayName ?? '').toLowerCase().contains(_query.toLowerCase()) &&
-            c.phones.isNotEmpty)
+            c.phones.isNotEmpty &&
+            (c.displayName ?? '').toLowerCase().contains(_query.toLowerCase()))
         .toList();
     return Dialog(
       backgroundColor: const Color(0xFF1a1a1a),
@@ -280,7 +472,7 @@ class _ContactPickerDialogState extends State<_ContactPickerDialog> {
           child: TextField(
             autofocus: true,
             decoration: const InputDecoration(
-              hintText: 'Search contacts...',
+              hintText: 'Search contacts…',
               prefixIcon: Icon(Icons.search),
             ),
             onChanged: (v) => setState(() => _query = v),
