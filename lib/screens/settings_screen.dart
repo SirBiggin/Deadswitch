@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../services/settings_service.dart';
 import '../services/sms_service.dart';
 import '../services/web_server.dart';
@@ -30,6 +31,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _fromCtrl        = TextEditingController();
   final _testToCtrl      = TextEditingController();
   final _customCodeCtrl  = TextEditingController();
+  String _version = '';
   bool _saved = false;
   bool _testing = false;
   String? _testResult;
@@ -56,12 +58,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final portal = await SettingsService.webPortalEnabled;
     final ip     = portal ? await WebServer.localIp : null;
     final code   = await SettingsService.countryCode;
+    final info   = await PackageInfo.fromPlatform();
     setState(() {
       _keyCtrl.text     = key;
       _fromCtrl.text    = from;
       _webPortalEnabled = portal;
       _webIp            = ip;
       _countryCode             = code;
+      _version                 = info.version;
       _customCodeCtrl.text     = code;
     });
   }
@@ -327,7 +331,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               _infoRow('App', 'DeadSwitch'),
-              _infoRow('Version', '1.2.6'),
+              _infoRow('Version', _version.isEmpty ? '…' : _version),
               _infoRow('SMS Provider', 'httpsms.com'),
               const SizedBox(height: 8),
               const Text(
