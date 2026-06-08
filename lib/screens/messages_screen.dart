@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import '../db/database.dart';
+import '../services/settings_service.dart';
 
 class MessagesScreen extends StatefulWidget {
   const MessagesScreen({super.key});
@@ -180,10 +181,12 @@ class _MessageFormScreenState extends State<_MessageFormScreen> {
   List<Map<String, String>> _recipients = [];
   bool _showManual = false;
   bool _saving     = false;
+  String _countryCode = '1';
 
   @override
   void initState() {
     super.initState();
+    SettingsService.countryCode.then((c) { if (mounted) setState(() => _countryCode = c); });
     if (widget.existing != null) {
       _nameCtrl.text = widget.existing!['name']    as String? ?? '';
       _msgCtrl.text  = widget.existing!['message'] as String? ?? '';
@@ -202,12 +205,8 @@ class _MessageFormScreenState extends State<_MessageFormScreen> {
     super.dispose();
   }
 
-  String _norm(String phone) {
-    final d = phone.replaceAll(RegExp(r'\D'), '');
-    if (d.length == 10) return '+1$d';
-    if (d.length == 11 && d.startsWith('1')) return '+$d';
-    return phone.startsWith('+') ? phone : '+$d';
-  }
+  String _norm(String phone) =>
+      SettingsService.normalizePhone(phone, _countryCode);
 
   Future<void> _pickContact() async {
     try {
