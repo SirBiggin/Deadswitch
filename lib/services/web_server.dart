@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
@@ -56,6 +57,7 @@ class WebServer {
     router.post('/api/messages', _createMessage);
     router.put('/api/messages/<id>', (Request r, String id) => _updateMessage(r, id));
     router.delete('/api/messages/<id>', (Request r, String id) => _deleteMessage(r, id));
+    router.get('/api/phonebook', _getPhonebook);
     router.get('/api/settings', _getSettings);
     router.put('/api/settings', _updateSettings);
     router.post('/api/settings/test', _testSend);
@@ -183,6 +185,27 @@ class WebServer {
     await db.delete('message_recipients', where: 'message_id = ?', whereArgs: [mid]);
     await db.delete('messages', where: 'id = ?', whereArgs: [mid]);
     return _ok({'ok': true});
+  }
+
+  // Phonebook
+  static Future<Response> _getPhonebook(Request req) async {
+    try {
+      final contacts = await FlutterContacts.getAll(
+          properties: {ContactProperty.phone});
+      final result = <Map<String, dynamic>>[];
+      for (final c in contacts) {
+        if (c.phones.isEmpty) continue;
+        result.add({
+          'name': c.displayName,
+          'phones': c.phones.map((p) => p.number).toList(),
+        });
+      }
+      result.sort((a, b) =>
+          (a['name'] as String).compareTo(b['name'] as String));
+      return _ok(result);
+    } catch (e) {
+      return _ok(<String, dynamic>{'error': '$e'}, status: 500);
+    }
   }
 
   // Settings

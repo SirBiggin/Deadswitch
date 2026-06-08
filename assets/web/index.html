@@ -28,7 +28,6 @@
     .btn-ghost   { background: #242424; color: #bbb; border: 1px solid #333; }
     .btn-danger  { background: #2b1010; color: #c87e7e; border: 1px solid #5a2020; }
     .btn-green   { background: #0f2b0f; color: #7ec87e; border: 1px solid #2d5a2d; }
-    .btn-amber   { background: #2b1f0a; color: #f59e0b; border: 1px solid #5a3e14; }
     .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.79rem; }
 
     .field { margin-bottom: 0.85rem; }
@@ -68,10 +67,25 @@
     .rec-phone { color: #666; font-size: 0.78rem; }
     .btn-rm { background: none; border: none; color: #555; cursor: pointer; font-size: 0.95rem; padding: 0 0.2rem; line-height: 1; }
     .btn-rm:hover { color: #c87e7e; }
+
     .add-rec-form { display: none; background: #111; border: 1px solid #252525; border-radius: 6px; padding: 0.7rem; margin-top: 0.5rem; }
     .add-rec-form.open { display: block; }
     .add-rec-row { display: flex; gap: 0.4rem; align-items: flex-end; }
     .add-rec-row input { flex: 1; }
+
+    /* Contact picker */
+    #contacts-overlay { z-index: 300; }
+    #contacts-overlay .modal { max-width: 420px; max-height: 80vh; display: flex; flex-direction: column; padding: 1.25rem; }
+    #contacts-search { margin-bottom: 0.75rem; }
+    #contacts-list { overflow-y: auto; flex: 1; }
+    .contact-item { padding: 0.55rem 0.5rem; border-radius: 6px; cursor: pointer; }
+    .contact-item:hover { background: #242424; }
+    .contact-item-name { color: #e0e0e0; font-size: 0.9rem; }
+    .contact-item-phone { color: #666; font-size: 0.78rem; margin-top: 0.1rem; }
+    .contact-phones { padding: 0.25rem 0 0.25rem 0.75rem; }
+    .contact-phone-opt { padding: 0.4rem 0.5rem; border-radius: 5px; cursor: pointer; color: #7eb8f7; font-size: 0.85rem; }
+    .contact-phone-opt:hover { background: #1a2a3a; }
+    .contacts-loading { color: #555; text-align: center; padding: 2rem; }
 
     .alert { padding: 0.6rem 0.85rem; border-radius: 6px; font-size: 0.8rem; font-family: monospace; white-space: pre-wrap; word-break: break-all; margin-top: 0.75rem; }
     .alert-ok  { background: #0c280c; border: 1px solid #295229; color: #7ec87e; }
@@ -107,7 +121,6 @@
     <span class="nav-tab" id="nt-settings" onclick="showTab('settings')">Settings</span>
   </nav>
 
-  <!-- Messages -->
   <div class="container" id="tab-messages">
     <div class="page-header">
       <div class="page-title">Messages</div>
@@ -116,7 +129,6 @@
     <div id="messages-list"></div>
   </div>
 
-  <!-- Settings -->
   <div class="container" id="tab-settings" style="display:none;">
     <div class="page-title" style="margin-bottom:1.25rem;">Settings</div>
     <div class="card">
@@ -140,7 +152,6 @@
   <div class="modal">
     <div class="modal-title" id="modal-title">New Message</div>
 
-    <!-- Group name — only shown when 2+ recipients -->
     <div class="field" id="group-name-field" style="display:none;">
       <label>Group Name</label>
       <input type="text" id="m-name" placeholder="e.g. Family, Work, Emergency" autocomplete="off">
@@ -154,7 +165,8 @@
     <div class="rec-section-hdr">
       <label style="font-size:0.75rem;color:#666;font-weight:600;letter-spacing:0.8px;">RECIPIENTS</label>
       <div class="rec-add-btns">
-        <button type="button" class="btn btn-ghost btn-sm" onclick="toggleAddRec()">+ Manual</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="openContactsPicker()">Contacts</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="manual-btn" onclick="toggleAddRec()">Manual</button>
       </div>
     </div>
 
@@ -177,6 +189,18 @@
   </div>
 </div>
 
+<!-- Contacts picker -->
+<div class="overlay" id="contacts-overlay" onclick="if(event.target===this)closeContactsPicker()">
+  <div class="modal">
+    <div class="modal-title" style="margin-bottom:0.75rem;">Select Contact</div>
+    <input type="text" id="contacts-search" placeholder="Search contacts…" oninput="filterContacts(this.value)">
+    <div id="contacts-list"><div class="contacts-loading"><span class="spin"></span></div></div>
+    <div class="modal-actions" style="margin-top:0.75rem;">
+      <button class="btn btn-ghost" onclick="closeContactsPicker()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script>
 'use strict';
 
@@ -184,6 +208,8 @@ let _pin = sessionStorage.getItem('ds_pin') || '';
 let _messages = [];
 let _editId = null;
 let _recs = [];
+let _phonebook = null;
+let _filteredBook = [];
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 async function init() {
@@ -351,7 +377,6 @@ async function saveMessage() {
   } else if (_recs.length === 1) {
     name = _recs[0].name;
   } else {
-    showAlert('modal-alert', 'Add at least one recipient.', false);
     return;
   }
   const message = document.getElementById('m-message').value.trim();
@@ -366,6 +391,73 @@ async function delMessage(id, name) {
   if (!confirm('Delete "' + name + '"?')) return;
   await api('DELETE', '/messages/' + id);
   await loadMessages();
+}
+
+// ── Contacts picker ───────────────────────────────────────────────────────────
+async function openContactsPicker() {
+  document.getElementById('contacts-search').value = '';
+  document.getElementById('contacts-list').innerHTML = '<div class="contacts-loading"><span class="spin"></span></div>';
+  document.getElementById('contacts-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('contacts-search').focus(), 80);
+
+  if (!_phonebook) {
+    try {
+      _phonebook = await api('GET', '/phonebook');
+    } catch(e) {
+      document.getElementById('contacts-list').innerHTML =
+        '<div class="contacts-loading" style="color:#c87e7e;">Failed to load contacts.</div>';
+      return;
+    }
+  }
+  _filteredBook = _phonebook;
+  renderContactsList(_phonebook);
+}
+
+function closeContactsPicker() {
+  document.getElementById('contacts-overlay').classList.remove('open');
+}
+
+function filterContacts(q) {
+  if (!_phonebook) return;
+  const lq = q.toLowerCase();
+  _filteredBook = q ? _phonebook.filter(c =>
+    c.name.toLowerCase().includes(lq) ||
+    c.phones.some(p => p.includes(lq))
+  ) : _phonebook;
+  renderContactsList(_filteredBook);
+}
+
+function renderContactsList(list) {
+  const el = document.getElementById('contacts-list');
+  if (list.length === 0) {
+    el.innerHTML = '<div class="contacts-loading">No contacts found.</div>';
+    return;
+  }
+  el.innerHTML = list.map((c, ci) => {
+    const already = _recs.some(r => c.phones.includes(r.phone));
+    if (c.phones.length === 1) {
+      return `<div class="contact-item${already ? '" style="opacity:0.4;cursor:default' : ''}" onclick="${already ? '' : `pickContact(${ci},0)`}">
+        <div class="contact-item-name">${esc(c.name)}</div>
+        <div class="contact-item-phone">${esc(c.phones[0])}</div>
+      </div>`;
+    }
+    return `<div class="contact-item" style="cursor:default;">
+      <div class="contact-item-name">${esc(c.name)}</div>
+      <div class="contact-phones">${c.phones.map((p, pi) => {
+        const used = _recs.some(r => r.phone === p);
+        return `<div class="contact-phone-opt${used ? '" style="opacity:0.4;cursor:default' : ''}" onclick="${used ? '' : `pickContact(${ci},${pi})`}">${esc(p)}</div>`;
+      }).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+function pickContact(ci, pi) {
+  const c = _filteredBook[ci];
+  const phone = c.phones[pi];
+  if (_recs.some(r => r.phone === phone)) return;
+  _recs.push({name: c.name, phone});
+  renderRecList();
+  closeContactsPicker();
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
@@ -402,11 +494,7 @@ async function testSend() {
 
 function showAlert(id, text, ok) {
   let el = document.getElementById(id);
-  if (!el) {
-    el = document.createElement('div');
-    el.id = id;
-    document.getElementById('msg-overlay').querySelector('.modal').appendChild(el);
-  }
+  if (!el) { el = document.createElement('div'); el.id = id; }
   el.className = 'alert ' + (ok ? 'alert-ok' : 'alert-err');
   el.textContent = text;
 }
