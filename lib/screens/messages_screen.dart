@@ -275,12 +275,23 @@ class _MessageFormScreenState extends State<_MessageFormScreen> {
   }
 
   Future<void> _save() async {
-    final name = _nameCtrl.text.trim();
-    if (name.isEmpty) {
+    final String name;
+    if (_recipients.length >= 2) {
+      final n = _nameCtrl.text.trim();
+      if (n.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Enter a group name')));
+        return;
+      }
+      name = n;
+    } else if (_recipients.length == 1) {
+      name = _recipients[0]['name']!;
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Enter a name for this message')));
+          const SnackBar(content: Text('Add at least one recipient')));
       return;
     }
+
     setState(() => _saving = true);
     final db      = await DB.instance;
     final payload = {'name': name, 'message': _msgCtrl.text.trim()};
@@ -305,6 +316,7 @@ class _MessageFormScreenState extends State<_MessageFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final multiRecipient = _recipients.length >= 2;
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.existing != null ? 'Edit Message' : 'New Message'),
@@ -323,15 +335,18 @@ class _MessageFormScreenState extends State<_MessageFormScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-          TextField(
-            controller: _nameCtrl,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              labelText: 'Name',
-              hintText: 'e.g. Family, Work, Emergency',
+          if (multiRecipient) ...[
+            TextField(
+              controller: _nameCtrl,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Group Name',
+                hintText: 'e.g. Family, Work, Emergency',
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
+          ],
+
           TextField(
             controller: _msgCtrl,
             maxLines: 5,

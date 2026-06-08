@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../services/settings_service.dart';
 import '../services/sms_service.dart';
 import '../services/web_server.dart';
@@ -114,6 +116,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _toggleWebPortal(bool enabled) async {
     await SettingsService.setWebPortalEnabled(enabled);
     if (enabled) {
+      
+      await Permission.notification.request();
+      final battStatus = await Permission.ignoreBatteryOptimizations.status;
+      if (!battStatus.isGranted) {
+        await Permission.ignoreBatteryOptimizations.request();
+      }
       try { await WebServer.start(); } catch (_) {}
       final ip = await WebServer.localIp;
       setState(() { _webPortalEnabled = true; _webIp = ip; });

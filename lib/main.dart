@@ -66,6 +66,7 @@ void main() async {
     }
     try {
       if (await SettingsService.webPortalEnabled) {
+        
         await WebServer.start();
       }
     } catch (_) {}
