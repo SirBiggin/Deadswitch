@@ -1,7 +1,7 @@
 name: deadswitch_app
 description: "DeadSwitch - Dead man's switch app"
 publish_to: 'none'
-version: 1.2.47+59
+version: 1.2.48+60
 
 environment:
   sdk: ^3.12.1

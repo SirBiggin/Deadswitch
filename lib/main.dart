@@ -65,6 +65,14 @@ void callbackDispatcher() {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Initialise WorkManager before entering runZonedGuarded — the pigeon
+  // channel loses its connection when called inside a custom zone.
+  try {
+    await Workmanager().initialize(callbackDispatcher);
+  } catch (e) {
+    DebugLogger.log('MAIN', 'Workmanager init error: $e');
+  }
+
   FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
       channelId: 'deadswitch_trigger_v4',
@@ -86,16 +94,11 @@ void main() async {
     runApp(_CrashScreen(error: d.exception, stack: d.stack ?? StackTrace.empty));
   };
   await runZonedGuarded(() async {
-    DebugLogger.log('MAIN', 'app starting v1.2.47');
+    DebugLogger.log('MAIN', 'app starting v1.2.48');
     try {
       await NotificationService.init();
     } catch (e) {
       DebugLogger.log('MAIN', 'NotificationService.init error: $e');
-    }
-    try {
-      await Workmanager().initialize(callbackDispatcher);
-    } catch (e) {
-      DebugLogger.log('MAIN', 'Workmanager init error: $e');
     }
     try {
       if (await SettingsService.webPortalEnabled) {
