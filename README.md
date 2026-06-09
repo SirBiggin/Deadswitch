@@ -92,6 +92,7 @@ Requires Flutter 3.x and Android SDK with build tools.
 
 | Version | Notes |
 |---|---|
+| 1.2.48 | Fix WorkManager init (was broken inside runZonedGuarded); fix logger concurrent write interleaving |
 | 1.2.47 | Add debug log file (100 MB rotating, readable via ADB) |
 | 1.2.46 | Remove Test Send Now button from dashboard |
 | 1.2.45 | Fix heads-up notification on Samsung One UI — channel now uses default sound to trigger banner; dynamic trigger delay wired through TriggerService |
