@@ -4,7 +4,6 @@ import 'package:permission_handler/permission_handler.dart';
 import '../services/trigger_service.dart';
 import '../services/notification_service.dart';
 import '../services/settings_service.dart';
-import '../services/sms_service.dart';
 import '../services/permission_service.dart';
 import '../db/database.dart';
 import 'login_screen.dart';
@@ -126,85 +125,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     await TriggerService.abort();
   }
 
-  Future<void> _testSend() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF1a1a1a),
-        title: const Text('Test Send Now', style: TextStyle(color: Colors.white)),
-        content: const Text(
-          'Send all configured messages immediately, bypassing the timer. Use to verify the full pipeline.',
-          style: TextStyle(color: Colors.grey),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFFf0b04a)),
-            child: const Text('Send Now'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    final results = await SmsService.sendAllMessages();
-
-    // Log the manual test so the status card reflects it.
-    try {
-      final db = await DB.instance;
-      final anyFailed = results.any((r) => r['status'] != 'sent');
-      await db.insert('trigger_log',
-          {'status': results.isEmpty ? 'test_empty' : (anyFailed ? 'test_partial' : 'test_ok')});
-    } catch (_) {}
-    setState(() => _statusRefresh++);
-
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF1a1a1a),
-        title: const Text('Test Results', style: TextStyle(color: Colors.white)),
-        content: results.isEmpty
-            ? const Text('No messages configured.',
-                style: TextStyle(color: Colors.grey))
-            : SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: results.map((r) {
-                    final ok = r['status'] == 'sent';
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Icon(ok ? Icons.check_circle : Icons.error_outline,
-                            size: 16,
-                            color: ok ? const Color(0xFF7ec87e) : const Color(0xFFc87e7e)),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(
-                          '${r['contact']} (${r['label']}): ${r['status']}'
-                          '${(r['detail'] as String?)?.isNotEmpty == true ? '\n${r['detail']}' : ''}',
-                          style: TextStyle(
-                            color: ok ? Colors.white : const Color(0xFFc87e7e),
-                            fontSize: 13,
-                          ),
-                        )),
-                      ]),
-                    );
-                  }).toList(),
-                ),
-              ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -219,20 +139,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         _StatusCard(key: ValueKey(_statusRefresh), onRefresh: _checkPending),
         const SizedBox(height: 12),
         _TriggerCard(sendAt: _sendAt, onInitiate: _initiate, onAbort: _abort, delayMinutes: _delayMinutes),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: _testSend,
-            icon: const Icon(Icons.science_outlined, size: 16),
-            label: const Text('Test Send Now'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF888888),
-              side: const BorderSide(color: Color(0xFF333333)),
-              padding: const EdgeInsets.symmetric(vertical: 10),
-            ),
-          ),
-        ),
       ]),
     );
   }
