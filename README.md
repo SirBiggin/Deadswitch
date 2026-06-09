@@ -92,6 +92,7 @@ Requires Flutter 3.x and Android SDK with build tools.
 
 | Version | Notes |
 |---|---|
+| 1.2.50 | Remove WorkManager — consistently failed to initialize on Samsung One UI 6, foreground service is sufficient backup |
 | 1.2.48 | Fix WorkManager init (was broken inside runZonedGuarded); fix logger concurrent write interleaving |
 | 1.2.47 | Add debug log file (100 MB rotating, readable via ADB) |
 | 1.2.46 | Remove Test Send Now button from dashboard |

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:workmanager/workmanager.dart';
 import '../db/database.dart';
 import 'notification_service.dart';
 import 'settings_service.dart';
@@ -9,8 +8,6 @@ import 'foreground_task_handler.dart';
 import 'debug_logger.dart';
 
 class TriggerService {
-  static const taskName = 'deadswitch_send';
-  static const _taskTag = 'deadswitch';
 
   static Timer? _triggerTimer;
 
@@ -49,14 +46,6 @@ class TriggerService {
     } catch (e) {
       DebugLogger.log('TRIGGER', 'foreground service error: $e');
     }
-
-    await Workmanager().cancelByTag(_taskTag);
-    await Workmanager().registerOneOffTask(
-      taskName, taskName,
-      tag: _taskTag,
-      initialDelay: Duration(minutes: delay),
-    );
-    DebugLogger.log('TRIGGER', 'workmanager registered delay=${delay}m');
 
     return sendAt.toLocal();
   }
@@ -103,7 +92,6 @@ class TriggerService {
     await db.update('pending_triggers', {'status': 'cancelled'},
         where: "status = 'pending'");
     try { await FlutterForegroundTask.stopService(); } catch (_) {}
-    await Workmanager().cancelByTag(_taskTag);
     await NotificationService.cancelCountdown();
   }
 

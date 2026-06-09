@@ -1,10 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:sqflite/sqflite.dart';
-import 'package:workmanager/workmanager.dart';
-import 'db/database.dart';
-import 'services/sms_service.dart';
 import 'services/trigger_service.dart';
 import 'services/settings_service.dart';
 import 'services/notification_service.dart';
@@ -14,64 +10,8 @@ import 'services/web_server.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 
-@pragma('vm:entry-point')
-void callbackDispatcher() {
-  Workmanager().executeTask((task, _) async {
-    DebugLogger.log('WM', 'task started: $task');
-    Database? db;
-    try {
-      if (task == TriggerService.taskName) {
-        db = await DB.instance;
-        await db.insert('trigger_log', {'status': 'wm_started'});
-        final due = await db.query('pending_triggers',
-            where: "status = 'pending' AND send_at <= ?",
-            whereArgs: [DateTime.now().toUtc().toIso8601String()]);
-        if (due.isEmpty) {
-          DebugLogger.log('WM', 'no due triggers');
-          await db.insert('trigger_log', {'status': 'wm_no_due'});
-        }
-        bool processed = false;
-        for (final row in due) {
-          try {
-            final results = await SmsService.sendAllMessages();
-            final anyFailed = results.any((r) => r['status'] != 'sent');
-            for (final r in results) DebugLogger.log('SMS', 'wm: ${r["contact"]}: ${r["status"]} ${r["detail"] ?? ""}');
-            await db.update('pending_triggers', {'status': 'success'},
-                where: 'id = ?', whereArgs: [row['id']]);
-            await db.insert('trigger_log',
-                {'status': anyFailed ? 'partial' : 'success'});
-            DebugLogger.log('WM', 'fire done anyFailed=$anyFailed');
-          } catch (e) {
-            await db.update('pending_triggers', {'status': 'error'},
-                where: 'id = ?', whereArgs: [row['id']]);
-            await db.insert('trigger_log', {'status': 'error: $e'});
-          }
-          processed = true;
-        }
-        if (processed) {
-          try { await NotificationService.cancelCountdown(); } catch (_) {}
-        }
-      }
-    } catch (e) {
-      try {
-        db ??= await DB.instance;
-        await db.insert('trigger_log', {'status': 'wm_crash: $e'});
-      } catch (_) {}
-    }
-    return true;
-  });
-}
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialise WorkManager before entering runZonedGuarded — the pigeon
-  // channel loses its connection when called inside a custom zone.
-  try {
-    await Workmanager().initialize(callbackDispatcher);
-  } catch (e) {
-    DebugLogger.log('MAIN', 'Workmanager init error: $e');
-  }
 
   FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
@@ -94,7 +34,7 @@ void main() async {
     runApp(_CrashScreen(error: d.exception, stack: d.stack ?? StackTrace.empty));
   };
   await runZonedGuarded(() async {
-    DebugLogger.log('MAIN', 'app starting v1.2.48');
+    DebugLogger.log('MAIN', 'app starting v1.2.50');
     try {
       await NotificationService.init();
     } catch (e) {
