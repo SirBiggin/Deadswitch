@@ -1,6 +1,7 @@
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import '../db/database.dart';
 import 'sms_service.dart';
+import 'debug_logger.dart';
 
 @pragma('vm:entry-point')
 void startDeadSwitchCallback() {
@@ -10,10 +11,13 @@ void startDeadSwitchCallback() {
 class DeadSwitchTaskHandler extends TaskHandler {
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
+    DebugLogger.log('FG', 'service started starter=$starter');
     try {
       final db = await DB.instance;
       await db.insert('trigger_log', {'status': 'fg_started'});
-    } catch (_) {}
+    } catch (e) {
+      DebugLogger.log('FG', 'onStart db error: $e');
+    }
   }
 
   @override
@@ -52,11 +56,14 @@ class DeadSwitchTaskHandler extends TaskHandler {
         try {
           final results = await SmsService.sendAllMessages();
           final anyFailed = results.any((r) => r['status'] != 'sent');
+          for (final r in results) DebugLogger.log('SMS', 'fg: ${r["contact"]}: ${r["status"]} ${r["detail"] ?? ""}');
           await db.update('pending_triggers', {'status': 'success'},
               where: 'id = ?', whereArgs: [row['id']]);
           await db.insert('trigger_log',
               {'status': anyFailed ? 'partial' : 'success'});
+          DebugLogger.log('FG', 'fire done anyFailed=$anyFailed');
         } catch (e) {
+          DebugLogger.log('FG', 'fire sms error: $e');
           await db.update('pending_triggers', {'status': 'error'},
               where: 'id = ?', whereArgs: [row['id']]);
           await db.insert('trigger_log', {'status': 'error: $e'});
@@ -64,6 +71,7 @@ class DeadSwitchTaskHandler extends TaskHandler {
       }
       await FlutterForegroundTask.stopService();
     } catch (e) {
+      DebugLogger.log('FG', 'crash: $e');
       try {
         final db = await DB.instance;
         await db.insert('trigger_log', {'status': 'fg_crash: $e'});
@@ -72,5 +80,7 @@ class DeadSwitchTaskHandler extends TaskHandler {
   }
 
   @override
-  Future<void> onDestroy(DateTime timestamp) async {}
+  Future<void> onDestroy(DateTime timestamp) async {
+    DebugLogger.log('FG', 'service destroyed');
+  }
 }

@@ -8,6 +8,7 @@ import 'services/sms_service.dart';
 import 'services/trigger_service.dart';
 import 'services/settings_service.dart';
 import 'services/notification_service.dart';
+import 'services/debug_logger.dart';
 import 'services/foreground_task_handler.dart';
 import 'services/web_server.dart';
 import 'screens/login_screen.dart';
@@ -16,6 +17,7 @@ import 'screens/dashboard_screen.dart';
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, _) async {
+    DebugLogger.log('WM', 'task started: $task');
     Database? db;
     try {
       if (task == TriggerService.taskName) {
@@ -25,6 +27,7 @@ void callbackDispatcher() {
             where: "status = 'pending' AND send_at <= ?",
             whereArgs: [DateTime.now().toUtc().toIso8601String()]);
         if (due.isEmpty) {
+          DebugLogger.log('WM', 'no due triggers');
           await db.insert('trigger_log', {'status': 'wm_no_due'});
         }
         bool processed = false;
@@ -32,10 +35,12 @@ void callbackDispatcher() {
           try {
             final results = await SmsService.sendAllMessages();
             final anyFailed = results.any((r) => r['status'] != 'sent');
+            for (final r in results) DebugLogger.log('SMS', 'wm: ${r["contact"]}: ${r["status"]} ${r["detail"] ?? ""}');
             await db.update('pending_triggers', {'status': 'success'},
                 where: 'id = ?', whereArgs: [row['id']]);
             await db.insert('trigger_log',
                 {'status': anyFailed ? 'partial' : 'success'});
+            DebugLogger.log('WM', 'fire done anyFailed=$anyFailed');
           } catch (e) {
             await db.update('pending_triggers', {'status': 'error'},
                 where: 'id = ?', whereArgs: [row['id']]);
@@ -81,12 +86,17 @@ void main() async {
     runApp(_CrashScreen(error: d.exception, stack: d.stack ?? StackTrace.empty));
   };
   await runZonedGuarded(() async {
+    DebugLogger.log('MAIN', 'app starting v1.2.47');
     try {
       await NotificationService.init();
-    } catch (_) {}
+    } catch (e) {
+      DebugLogger.log('MAIN', 'NotificationService.init error: $e');
+    }
     try {
       await Workmanager().initialize(callbackDispatcher);
-    } catch (_) {}
+    } catch (e) {
+      DebugLogger.log('MAIN', 'Workmanager init error: $e');
+    }
     try {
       if (await SettingsService.webPortalEnabled) {
         await WebServer.start();
@@ -94,6 +104,7 @@ void main() async {
     } catch (_) {}
     runApp(const DeadSwitchApp());
   }, (error, stack) {
+    DebugLogger.log('CRASH', '$error\n$stack');
     runApp(_CrashScreen(error: error, stack: stack));
   });
 }

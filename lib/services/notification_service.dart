@@ -1,4 +1,5 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'debug_logger.dart';
 
 class NotificationService {
   static const _channelId = 'deadswitch_countdown_v6';
@@ -15,7 +16,10 @@ class NotificationService {
       final android = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
       await android?.requestNotificationsPermission();
-    } catch (_) {}
+      DebugLogger.log('NOTIF', 'plugin initialised');
+    } catch (e) {
+      DebugLogger.log('NOTIF', 'init error: $e');
+    }
   }
 
   static Future<void> showCountdown(DateTime sendAt) async {
@@ -42,13 +46,19 @@ class NotificationService {
         ' ',
         NotificationDetails(android: details),
       );
-    } catch (_) {}
+      DebugLogger.log('NOTIF', 'showCountdown ok sendAt=$sendAt');
+    } catch (e) {
+      DebugLogger.log('NOTIF', 'showCountdown error: $e');
+    }
   }
 
   static Future<void> cancelCountdown() async {
     try {
       await init();
       await _plugin.cancelAll();
-    } catch (_) {}
+      DebugLogger.log('NOTIF', 'cancelCountdown ok');
+    } catch (e) {
+      DebugLogger.log('NOTIF', 'cancelCountdown error: $e');
+    }
   }
 }

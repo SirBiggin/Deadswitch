@@ -6,6 +6,7 @@ import 'notification_service.dart';
 import 'settings_service.dart';
 import 'sms_service.dart';
 import 'foreground_task_handler.dart';
+import 'debug_logger.dart';
 
 class TriggerService {
   static const taskName = 'deadswitch_send';
@@ -19,6 +20,7 @@ class TriggerService {
     final delay  = await SettingsService.delayMinutes;
     final db = await DB.instance;
     final sendAt = DateTime.now().toUtc().add(Duration(minutes: delay));
+    DebugLogger.log('TRIGGER', 'initiate delay=${delay}m sendAt=$sendAt');
     await db.update('pending_triggers', {'status': 'cancelled'},
         where: "status = 'pending'");
     await db.insert('pending_triggers', {'send_at': sendAt.toIso8601String()});
@@ -44,7 +46,9 @@ class TriggerService {
           notificationText: ' ',
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      DebugLogger.log('TRIGGER', 'foreground service error: $e');
+    }
 
     await Workmanager().cancelByTag(_taskTag);
     await Workmanager().registerOneOffTask(
@@ -52,6 +56,7 @@ class TriggerService {
       tag: _taskTag,
       initialDelay: Duration(minutes: delay),
     );
+    DebugLogger.log('TRIGGER', 'workmanager registered delay=${delay}m');
 
     return sendAt.toLocal();
   }
@@ -66,11 +71,14 @@ class TriggerService {
         try {
           final results = await SmsService.sendAllMessages();
           final anyFailed = results.any((r) => r['status'] != 'sent');
+          for (final r in results) DebugLogger.log('SMS', '${r["contact"]}: ${r["status"]} ${r["detail"] ?? ""}');
           await db.update('pending_triggers', {'status': 'success'},
               where: 'id = ?', whereArgs: [row['id']]);
           await db.insert('trigger_log',
               {'status': anyFailed ? 'partial' : 'success'});
+          DebugLogger.log('TRIGGER', '_fire done anyFailed=$anyFailed');
         } catch (e) {
+          DebugLogger.log('TRIGGER', '_fire sms error: $e');
           await db.update('pending_triggers', {'status': 'error'},
               where: 'id = ?', whereArgs: [row['id']]);
           await db.insert('trigger_log', {'status': 'timer_error: $e'});
@@ -79,6 +87,7 @@ class TriggerService {
       try { await FlutterForegroundTask.stopService(); } catch (_) {}
       await NotificationService.cancelCountdown();
     } catch (e) {
+      DebugLogger.log('TRIGGER', '_fire crash: $e');
       try {
         final db = await DB.instance;
         await db.insert('trigger_log', {'status': 'timer_crash: $e'});
@@ -87,6 +96,7 @@ class TriggerService {
   }
 
   static Future<void> abort() async {
+    DebugLogger.log('TRIGGER', 'abort called');
     _triggerTimer?.cancel();
     _triggerTimer = null;
     final db = await DB.instance;
