@@ -224,21 +224,10 @@ class WebServer {
     }
   }
 
-  static Future<Response> _getSettings(Request req) async => _ok({
-        'httpsms_key': await SettingsService.httpsmsKey,
-        'httpsms_from': await SettingsService.httpsmsFrom,
-      });
+  static Future<Response> _getSettings(Request req) async => _ok(<String, dynamic>{});
 
-  static Future<Response> _updateSettings(Request req) async {
-    final b = await _body(req);
-    if (b['httpsms_key'] != null) {
-      await SettingsService.setHttpsmsKey(b['httpsms_key']);
-    }
-    if (b['httpsms_from'] != null) {
-      await SettingsService.setHttpsmsFrom(b['httpsms_from']);
-    }
-    return _ok({'ok': true});
-  }
+  static Future<Response> _updateSettings(Request req) async =>
+      _ok({'ok': true});
 
   static Future<Response> _testSend(Request req) async {
     final b = await _body(req);

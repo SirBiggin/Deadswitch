@@ -5,7 +5,8 @@ import 'dashboard_screen.dart';
 class LoginScreen extends StatefulWidget {
   final bool isSetup;
   final bool isReauth;
-  const LoginScreen({super.key, this.isSetup = false, this.isReauth = false});
+  final VoidCallback? onUnlocked;
+  const LoginScreen({super.key, this.isSetup = false, this.isReauth = false, this.onUnlocked});
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -28,7 +29,11 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     if (!mounted) return;
     if (widget.isReauth) {
-      Navigator.pop(context);
+      if (widget.onUnlocked != null) {
+        widget.onUnlocked!();
+      } else {
+        Navigator.pop(context);
+      }
     } else {
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DashboardScreen()));
     }
