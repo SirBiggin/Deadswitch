@@ -92,6 +92,7 @@ Requires Flutter 3.x and Android SDK with build tools.
 
 | Version | Notes |
 |---|---|
+| 1.2.46 | Remove Test Send Now button from dashboard |
 | 1.2.45 | Fix heads-up notification on Samsung One UI — channel now uses default sound to trigger banner; dynamic trigger delay wired through TriggerService |
 | 1.2.44 | Notification posted immediately on trigger press (before foreground service starts) |
 | 1.2.40 | Configurable trigger delay in Settings |
