@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/settings_service.dart';
@@ -15,7 +16,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _testToCtrl     = TextEditingController();
   final _customCodeCtrl = TextEditingController();
-  final _delayCtrl      = TextEditingController();
   String _version = '';
   bool _testing = false;
   String? _testResult;
@@ -23,7 +23,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _webPortalEnabled = false;
   String? _webIp;
   String _countryCode = '1';
-  int _delayMinutes = 15;
 
   @override
   void initState() { super.initState(); _load(); }
@@ -32,7 +31,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _testToCtrl.dispose();
     _customCodeCtrl.dispose();
-    _delayCtrl.dispose();
     super.dispose();
   }
 
@@ -40,16 +38,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final portal = await SettingsService.webPortalEnabled;
     final ip     = portal ? await WebServer.localIp : null;
     final code   = await SettingsService.countryCode;
-    final delay  = await SettingsService.delayMinutes;
     final info   = await PackageInfo.fromPlatform();
     setState(() {
       _webPortalEnabled    = portal;
       _webIp               = ip;
       _countryCode         = code;
-      _delayMinutes        = delay;
       _version             = info.version;
       _customCodeCtrl.text = code;
-      _delayCtrl.text      = delay.toString();
     });
   }
 
@@ -59,20 +54,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _saveCountryCode(String code) async {
     await SettingsService.setCountryCode(code);
     setState(() => _countryCode = code);
-  }
-
-  Future<void> _saveDelay(String value) async {
-    final parsed = int.tryParse(value.trim());
-    if (parsed == null || parsed < 1) {
-      _delayCtrl.text = _delayMinutes.toString();
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Enter a number of minutes (minimum 1)')));
-      return;
-    }
-    await SettingsService.setDelayMinutes(parsed);
-    setState(() => _delayMinutes = parsed);
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Trigger delay set to $parsed minute${parsed == 1 ? '' : 's'}')));
   }
 
   Future<void> _testSend() async {
@@ -152,38 +133,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _section('Trigger Delay'),
-          Card(child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('How long to wait before sending messages after the trigger is activated.',
-                  style: TextStyle(color: Colors.grey, fontSize: 12)),
-              const SizedBox(height: 12),
-              Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-                SizedBox(
-                  width: 80,
-                  child: TextField(
-                    controller: _delayCtrl,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                    ),
-                    onSubmitted: _saveDelay,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Text('minutes', style: TextStyle(color: Colors.grey, fontSize: 14)),
-                const Spacer(),
-                TextButton(
-                  onPressed: () => _saveDelay(_delayCtrl.text),
-                  child: const Text('Save'),
-                ),
-              ]),
-            ]),
-          )),
-          const SizedBox(height: 20),
           _section('Test SMS'),
           Card(child: Padding(
             padding: const EdgeInsets.all(16),

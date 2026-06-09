@@ -8,7 +8,6 @@ import 'services/sms_service.dart';
 import 'services/trigger_service.dart';
 import 'services/settings_service.dart';
 import 'services/notification_service.dart';
-import 'services/foreground_task_handler.dart';
 import 'services/web_server.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
@@ -62,8 +61,8 @@ void main() async {
 
   FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
-      channelId: 'deadswitch_trigger_v4',
-      channelName: 'Dead Switch Active',
+      channelId: 'deadswitch_web_portal',
+      channelName: 'Web Portal',
       channelImportance: NotificationChannelImportance.LOW,
       priority: NotificationPriority.LOW,
     ),
@@ -71,7 +70,7 @@ void main() async {
       showNotification: false,
     ),
     foregroundTaskOptions: ForegroundTaskOptions(
-      eventAction: ForegroundTaskEventAction.repeat(60000),
+      eventAction: ForegroundTaskEventAction.nothing(),
       autoRunOnBoot: false,
       allowWifiLock: true,
     ),

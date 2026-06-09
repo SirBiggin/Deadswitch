@@ -1,160 +1,101 @@
-# ☠ DeadSwitch
+# DeadSwitch
 
-A dead man's switch for Android. Configure messages to specific people — if you don't abort in time, they all go out automatically via SMS.
+A dead man's switch for Android. Set a countdown timer — if you don't abort it in time, the app automatically sends pre-configured SMS/MMS messages to your chosen contacts.
 
----
-
-## How It Works
-
-1. **Initiate** the switch from the Dashboard
-2. A **15-minute countdown** begins
-3. If you **abort before time runs out**, nothing happens
-4. If the timer expires, every configured message is sent via SMS automatically
-5. You can re-initiate at any time after aborting or after a send
-
-The intent is that you check in regularly and abort the switch. If something happens to you and you stop checking in, the messages go out on their own.
+Built with Flutter. Tested on Samsung Galaxy S24 Ultra (One UI 6).
 
 ---
 
-## Required: httpsms App
+## What it does
 
-DeadSwitch does **not** send SMS directly from the app. It uses [httpsms.com](https://httpsms.com) as the SMS relay layer. This requires two things:
+1. Press **Initiate Dead Switch** on the dashboard
+2. A countdown timer starts (configurable delay, default 15 minutes)
+3. If you **Abort** before time runs out, nothing happens
+4. If the timer expires, every configured message is sent to its recipients via SMS or group MMS
 
-### 1. httpsms Android App
-Install the **httpsms** app on the **same phone** running DeadSwitch (or any Android phone that stays online):
-
-- [Download from Google Play](https://play.google.com/store/apps/details?id=com.httpsms)
-- The app runs in the background and listens for send requests from the httpsms API
-- Your phone's SIM card is used to physically send the SMS messages
-- The phone must be online and the httpsms app must be running when the trigger fires
-
-### 2. httpsms Account + API Key
-- Create a free account at [httpsms.com](https://httpsms.com)
-- Go to **Settings → API Key** and copy your key
-- Register your phone number in the httpsms dashboard
-- Enter both the API key and your phone number in the DeadSwitch **Settings** tab
-
-> Phone numbers must be in E.164 format: `+12025551234`. DeadSwitch auto-formats US numbers on save.
+The countdown shows as a heads-up notification immediately when triggered — visible on both the lock screen and notification shade. A foreground service and WorkManager backup keep the timer alive even if the phone sleeps.
 
 ---
 
 ## Features
 
-### Individual Messages
-Configure a personal message for each recipient. When the switch triggers, every person gets their own tailored message sent directly to their phone number.
-
-- Add recipients manually or pick from your phone's contacts
-- Each recipient has their own unique message
-- Edit or delete at any time
-
-### Groups
-Send one shared message to multiple people at once.
-
-- Create named groups (e.g. "Family", "Work", "Emergency Contacts")
-- Add recipients by picking from your phone's contacts or entering manually
-- Each group has its own message text
-- Multiple groups can be configured — all trigger simultaneously
-
-### Web Portal
-A built-in local web server lets you manage everything from a browser on the same Wi-Fi network — no need to interact with the phone directly.
-
-**To enable:**
-1. Go to **Settings → Web Portal** and toggle it on
-2. The URL appears (e.g. `http://192.168.1.x:8080`)
-3. Open that URL in any browser on the same network
-4. Enter your PIN to unlock
-5. Manage Individual Messages, Groups, and API settings from the browser
-
-The portal provides the same full CRUD interface as the app — add, edit, and delete messages and groups from a desktop or laptop.
-
-### PIN Protection
-The app is protected by a numeric PIN set on first launch. The same PIN is required to access the web portal.
+- **Configurable trigger delay** — set any delay (minimum 1 minute) in Settings
+- **Lock screen countdown notification** — appears immediately on trigger with a live countdown timer and skull icon
+- **Multiple messages** — configure as many messages as you want, each with its own recipients
+- **Group MMS** — messages with multiple recipients are sent as a group MMS thread; falls back to individual SMS if MMS fails
+- **Contact picker** — select recipients from your contacts or type numbers manually
+- **PIN lock** — app requires a PIN to open; re-locks when backgrounded
+- **Test Send** — send all messages immediately without starting the timer (to verify the pipeline works)
+- **SMS test** — send a single test message to any number from Settings
+- **Web portal** — configure messages from a browser on the same Wi-Fi network
+- **Skull and crossbones app icon** ☠
 
 ---
 
-## Setup Guide
+## Setup
 
-### First Launch
-1. Install the APK
-2. Set a PIN when prompted — **save this, there is no recovery**
-3. Go to **Settings** and enter your httpsms API key and phone number
-4. Tap **Send Test Message** to verify SMS delivery is working
-5. Add your recipients under **Individual Messages** and/or **Groups**
-6. Return to **Dashboard** and initiate the switch to test the flow
+### Permissions required
 
-### Building from Source
+| Permission | Purpose |
+|---|---|
+| SMS | Send messages when triggered |
+| Notifications | Show countdown timer |
+| Contacts | Pick recipients from your contact list |
+| Battery optimization exempt | Stay running when the screen is off |
 
-**Prerequisites:**
-- [Flutter SDK](https://flutter.dev/docs/get-started/install) (Dart 3.12+)
-- Android SDK (API 36 / Android 16 target)
-- Java 17+
+SMS is a restricted permission on Android. On first launch the app walks you through: App Info → ⋮ menu → "Allow restricted settings" → Permissions → SMS → Allow.
+
+### Install
+
+Download `app-release.apk` from the [latest release](../../releases/latest) and sideload it.
+
+---
+
+## Architecture
+
+| Component | Role |
+|---|---|
+| Flutter/Dart | UI and business logic |
+| `flutter_local_notifications` | Countdown notification (channel `deadswitch_countdown_v6`, IMPORTANCE_HIGH) |
+| `flutter_foreground_task` | Foreground service to keep the process alive during countdown |
+| WorkManager | Backup scheduler if the process is killed before the timer fires |
+| SQLite (`sqflite`) | Stores pending triggers, messages, recipients, and trigger log |
+| `shared_preferences` | Persists settings (PIN hash, delay minutes, web portal toggle) |
+| Native Kotlin (`MainActivity`) | Creates notification channels; SMS and group MMS via `SmsManager` |
+| `shelf` HTTP server | Optional LAN web portal for configuring messages from a browser |
+
+### Notification on Samsung One UI
+
+Samsung One UI forces all notification channels to `mLockscreenVisibility=-1000` (VISIBILITY_NO_OVERRIDE) regardless of what apps set — this affects every app on the device including system apps. Samsung uses the **notification-level** `visibility` field instead. The countdown notification posts with `visibility=PUBLIC`, which Samsung honours for lock screen display.
+
+The channel uses the device's default notification sound, which is what causes Samsung One UI to show the heads-up pop-up banner immediately when the trigger fires. `onlyAlertOnce: true` prevents the sound from repeating on subsequent timer updates.
+
+At each launch, `MainActivity.createNotificationChannels()` checks whether the channel was previously created with sound suppressed (older installs) and deletes + recreates it if so.
+
+---
+
+## Building from source
 
 ```bash
 git clone https://github.com/SirBiggin/Deadswitch.git
 cd Deadswitch
 flutter pub get
 flutter build apk --release
+# output: build/app/outputs/flutter-apk/app-release.apk
 ```
 
-The release APK will be at `build/app/outputs/flutter-apk/app-release.apk`.
-
-> **Notes:**
-> - `android/local.properties` is not included (machine-specific). Flutter generates it automatically on first build.
-> - `gradle-wrapper.jar` is not included (auto-generated binary). Gradle downloads it automatically on first build — an internet connection is required the first time.
-> - `gradlew` / `gradlew.bat` are included for anyone building manually outside of Flutter's toolchain.
+Requires Flutter 3.x and Android SDK with build tools.
 
 ---
 
-## Tech Stack
+## Version history
 
-| Layer | Technology |
+| Version | Notes |
 |---|---|
-| Framework | Flutter (Dart) |
-| Local database | SQLite via `sqflite` |
-| SMS delivery | httpsms.com REST API via `http` |
-| Background scheduling | WorkManager via `workmanager` |
-| Web portal server | `shelf` + `shelf_router` |
-| Contact picker | `flutter_contacts` |
-| Permissions | `permission_handler` |
-| Settings storage | `shared_preferences` |
-
-### Database Schema
-- **contacts** — individual message recipients (name, phone, message)
-- **message_groups** — group definitions (name, shared message)
-- **group_recipients** — recipients per group (independent of contacts table)
-- **pending_triggers** — scheduled send jobs with status tracking
-- **trigger_log** — history of all trigger events
-
-### Background Execution
-WorkManager is used to schedule the 15-minute delayed send. The task runs even if the app is backgrounded. On Android 16+, WorkManager's auto-initialization ContentProvider is disabled in `AndroidManifest.xml` and initialized manually in code to prevent crash-on-launch.
-
----
-
-## Permissions
-
-| Permission | Reason |
-|---|---|
-| `INTERNET` | httpsms API calls |
-| `READ_CONTACTS` | Contact picker for adding recipients |
-| `ACCESS_NETWORK_STATE` | Web portal: display local IP address |
-| `RECEIVE_BOOT_COMPLETED` | Re-schedule pending triggers after reboot |
-| `WAKE_LOCK` | Keep CPU awake during background send |
-| `SCHEDULE_EXACT_ALARM` | Precise 15-minute trigger timing |
-| `POST_NOTIFICATIONS` | WorkManager task notifications |
-| `FOREGROUND_SERVICE` | Background task execution |
-
----
-
-## Architecture Notes
-
-- **No cloud dependency** beyond httpsms — all data stays on-device in SQLite
-- **Web portal** binds to `0.0.0.0:8080` — accessible from any device on the same LAN
-- **PIN auth** is used for both the app lock screen and the web portal Bearer token
-- **Phone number normalization** is applied at all entry points — 10-digit US numbers are automatically formatted to E.164 (`+1XXXXXXXXXX`)
-- Group recipients are stored independently from individual contacts, so the same person can appear in both without duplication constraints
-
----
-
-## License
-
-MIT
+| 1.2.45 | Fix heads-up notification on Samsung One UI — channel now uses default sound to trigger banner; dynamic trigger delay wired through TriggerService |
+| 1.2.44 | Notification posted immediately on trigger press (before foreground service starts) |
+| 1.2.40 | Configurable trigger delay in Settings |
+| 1.2.38 | Skull and crossbones app icon; larger skull + white text in notification |
+| 1.2.35 | Remove "Tap to abort" from notification body |
+| 1.2.24 | Lock screen countdown notification; PIN re-auth on app resume |
+| 1.2.20 | Instant UI response on initiate and abort |

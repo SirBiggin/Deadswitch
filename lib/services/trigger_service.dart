@@ -1,32 +1,98 @@
+import 'dart:async';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:workmanager/workmanager.dart';
 import '../db/database.dart';
 import 'notification_service.dart';
+import 'settings_service.dart';
+import 'sms_service.dart';
+import 'foreground_task_handler.dart';
 
 class TriggerService {
-  static const taskName    = 'deadswitch_send';
-  static const _taskTag    = 'deadswitch';
-  static const delayMinutes = 15;
+  static const taskName = 'deadswitch_send';
+  static const _taskTag = 'deadswitch';
+
+  static Timer? _triggerTimer;
 
   static Future<DateTime> initiate() async {
-    final db     = await DB.instance;
-    final sendAt = DateTime.now().toUtc().add(const Duration(minutes: delayMinutes));
+    _triggerTimer?.cancel();
+
+    final delay  = await SettingsService.delayMinutes;
+    final db = await DB.instance;
+    final sendAt = DateTime.now().toUtc().add(Duration(minutes: delay));
     await db.update('pending_triggers', {'status': 'cancelled'},
         where: "status = 'pending'");
     await db.insert('pending_triggers', {'send_at': sendAt.toIso8601String()});
+
+    _triggerTimer = Timer(
+      Duration(minutes: delay),
+      () => _fire(sendAt),
+    );
+
+    try {
+      if (!await FlutterForegroundTask.isRunningService) {
+        FlutterForegroundTask.skipServiceResponseCheck = true;
+        await FlutterForegroundTask.startService(
+          serviceId: 256,
+          notificationTitle: '☠',
+          notificationText: ' ',
+          callback: startDeadSwitchCallback,
+        );
+        FlutterForegroundTask.skipServiceResponseCheck = false;
+      } else {
+        await FlutterForegroundTask.updateService(
+          notificationTitle: '☠',
+          notificationText: ' ',
+        );
+      }
+    } catch (_) {}
+
     await Workmanager().cancelByTag(_taskTag);
     await Workmanager().registerOneOffTask(
       taskName, taskName,
       tag: _taskTag,
-      initialDelay: const Duration(minutes: delayMinutes),
+      initialDelay: Duration(minutes: delay),
     );
-    await NotificationService.showCountdown(sendAt);
-    return sendAt;
+
+    return sendAt.toLocal();
+  }
+
+  static Future<void> _fire(DateTime sendAt) async {
+    try {
+      final db  = await DB.instance;
+      final due = await db.query('pending_triggers',
+          where: "status = 'pending' AND send_at <= ?",
+          whereArgs: [DateTime.now().toUtc().toIso8601String()]);
+      for (final row in due) {
+        try {
+          final results = await SmsService.sendAllMessages();
+          final anyFailed = results.any((r) => r['status'] != 'sent');
+          await db.update('pending_triggers', {'status': 'success'},
+              where: 'id = ?', whereArgs: [row['id']]);
+          await db.insert('trigger_log',
+              {'status': anyFailed ? 'partial' : 'success'});
+        } catch (e) {
+          await db.update('pending_triggers', {'status': 'error'},
+              where: 'id = ?', whereArgs: [row['id']]);
+          await db.insert('trigger_log', {'status': 'timer_error: $e'});
+        }
+      }
+      try { await FlutterForegroundTask.stopService(); } catch (_) {}
+      await NotificationService.cancelCountdown();
+    } catch (e) {
+      try {
+        final db = await DB.instance;
+        await db.insert('trigger_log', {'status': 'timer_crash: $e'});
+      } catch (_) {}
+    }
   }
 
   static Future<void> abort() async {
+    _triggerTimer?.cancel();
+    _triggerTimer = null;
     final db = await DB.instance;
     await db.update('pending_triggers', {'status': 'cancelled'},
         where: "status = 'pending'");
+    try { await FlutterForegroundTask.stopService(); } catch (_) {}
     await Workmanager().cancelByTag(_taskTag);
     await NotificationService.cancelCountdown();
   }

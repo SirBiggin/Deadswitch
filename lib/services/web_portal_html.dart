@@ -134,14 +134,7 @@ const String kWebPortalHtml = r'''
   <div class="container" id="tab-settings" style="display:none;">
     <div class="page-title" style="margin-bottom:1.25rem;">Settings</div>
     <div class="card">
-      <div class="section-label">HTTPSMS API</div>
-      <div class="field"><label>API Key</label><input type="password" id="s-key" placeholder="From httpsms.com/settings" autocomplete="off"></div>
-      <div class="field"><label>From Number</label><input type="tel" id="s-from" placeholder="+12025551234"></div>
-      <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
-      <div id="settings-alert"></div>
-    </div>
-    <div class="card">
-      <div class="section-label">TEST API CONNECTION</div>
+      <div class="section-label">TEST SMS</div>
       <div class="field"><label>Send test to (phone number)</label><input type="tel" id="test-to" placeholder="+12025551234"></div>
       <button class="btn btn-green" id="test-btn" onclick="testSend()">Send Test Message</button>
       <div id="test-alert"></div>
@@ -463,18 +456,6 @@ function pickContact(ci, pi) {
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
-async function loadSettings() {
-  const s = await api('GET', '/settings');
-  document.getElementById('s-key').value  = s.httpsms_key  ?? '';
-  document.getElementById('s-from').value = s.httpsms_from ?? '';
-}
-
-async function saveSettings() {
-  const httpsms_key  = document.getElementById('s-key').value.trim();
-  const httpsms_from = document.getElementById('s-from').value.trim();
-  await api('PUT', '/settings', {httpsms_key, httpsms_from});
-  showAlert('settings-alert', 'Settings saved.', true);
-}
 
 async function testSend() {
   const to = document.getElementById('test-to').value.trim();
