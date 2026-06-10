@@ -166,7 +166,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         selectedIndex: _tab,
         onDestinationSelected: (i) {
           setState(() => _tab = i);
-          if (i == 0) _checkPending();
+          if (i == 0) { _checkPending(); _loadDelay(); setState(() => _statusRefresh++); }
         },
         destinations: const [
           NavigationDestination(icon: Icon(Icons.dashboard), label: 'Dashboard'),
