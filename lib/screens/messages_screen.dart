@@ -1,7 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import '../db/database.dart';
 import '../services/settings_service.dart';
+
+String _fmtDelay(int secs) {
+  final parts = <String>[];
+  final d = secs ~/ 86400;          if (d > 0) parts.add('${d}d');
+  final h = (secs % 86400) ~/ 3600; if (h > 0) parts.add('${h}h');
+  final m = (secs % 3600)  ~/ 60;   if (m > 0) parts.add('${m}m');
+  final s = secs % 60;               if (s > 0) parts.add('${s}s');
+  return parts.isEmpty ? '0s' : parts.join(' ');
+}
 
 class MessagesScreen extends StatefulWidget {
   const MessagesScreen({super.key});
@@ -116,11 +126,12 @@ class _MessageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final recipients = (data['recipients'] as List<Map<String, dynamic>>? ?? []);
-    final count      = recipients.length;
-    final names      = recipients.map((r) => r['name'] as String).join(', ');
-    final message    = data['message'] as String? ?? '';
-    final enabled    = (data['enabled'] as int? ?? 1) != 0;
+    final recipients  = (data['recipients'] as List<Map<String, dynamic>>? ?? []);
+    final count       = recipients.length;
+    final names       = recipients.map((r) => r['name'] as String).join(', ');
+    final message     = data['message'] as String? ?? '';
+    final enabled     = (data['enabled'] as int? ?? 1) != 0;
+    final delaySecs   = data['delay_seconds'] as int? ?? 0;
 
     return Opacity(
       opacity: enabled ? 1.0 : 0.45,
@@ -169,6 +180,15 @@ class _MessageCard extends StatelessWidget {
                       style: const TextStyle(color: Color(0xFF666666), fontSize: 12),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis),
+                ],
+                if (delaySecs > 0) ...[
+                  const SizedBox(height: 5),
+                  Row(children: [
+                    const Icon(Icons.timer_outlined, size: 12, color: Color(0xFF7eb8f7)),
+                    const SizedBox(width: 4),
+                    Text('Sends ${_fmtDelay(delaySecs)} after trigger',
+                        style: const TextStyle(color: Color(0xFF7eb8f7), fontSize: 11)),
+                  ]),
                 ],
               ])),
               Column(mainAxisSize: MainAxisSize.min, children: [
@@ -219,6 +239,10 @@ class _MessageFormScreenState extends State<_MessageFormScreen> {
   final _msgCtrl      = TextEditingController();
   final _manNameCtrl  = TextEditingController();
   final _manPhoneCtrl = TextEditingController();
+  final _delayDCtrl   = TextEditingController();
+  final _delayHCtrl   = TextEditingController();
+  final _delayMCtrl   = TextEditingController();
+  final _delaySCtrl   = TextEditingController();
   List<Map<String, String>> _recipients = [];
   bool _showManual = false;
   bool _saving     = false;
@@ -228,21 +252,42 @@ class _MessageFormScreenState extends State<_MessageFormScreen> {
   void initState() {
     super.initState();
     SettingsService.countryCode.then((c) { if (mounted) setState(() => _countryCode = c); });
-    if (widget.existing != null) {
-      _nameCtrl.text = widget.existing!['name']    as String? ?? '';
-      _msgCtrl.text  = widget.existing!['message'] as String? ?? '';
-      final recs = widget.existing!['recipients'] as List<Map<String, dynamic>>? ?? [];
+    final ex = widget.existing;
+    if (ex != null) {
+      _nameCtrl.text = ex['name']    as String? ?? '';
+      _msgCtrl.text  = ex['message'] as String? ?? '';
+      final recs = ex['recipients'] as List<Map<String, dynamic>>? ?? [];
       _recipients = recs.map((r) => {
         'name':  r['name']  as String,
         'phone': r['phone'] as String,
       }).toList();
+      _setDelayControllers(ex['delay_seconds'] as int? ?? 0);
+    } else {
+      _setDelayControllers(0);
     }
+  }
+
+  void _setDelayControllers(int secs) {
+    _delayDCtrl.text = (secs ~/ 86400).toString();
+    _delayHCtrl.text = ((secs % 86400) ~/ 3600).toString();
+    _delayMCtrl.text = ((secs % 3600) ~/ 60).toString();
+    _delaySCtrl.text = (secs % 60).toString();
+  }
+
+  int get _delaySeconds {
+    final d = int.tryParse(_delayDCtrl.text.trim()) ?? 0;
+    final h = int.tryParse(_delayHCtrl.text.trim()) ?? 0;
+    final m = int.tryParse(_delayMCtrl.text.trim()) ?? 0;
+    final s = int.tryParse(_delaySCtrl.text.trim()) ?? 0;
+    return d * 86400 + h * 3600 + m * 60 + s;
   }
 
   @override
   void dispose() {
     _nameCtrl.dispose(); _msgCtrl.dispose();
     _manNameCtrl.dispose(); _manPhoneCtrl.dispose();
+    _delayDCtrl.dispose(); _delayHCtrl.dispose();
+    _delayMCtrl.dispose(); _delaySCtrl.dispose();
     super.dispose();
   }
 
@@ -335,7 +380,7 @@ class _MessageFormScreenState extends State<_MessageFormScreen> {
 
     setState(() => _saving = true);
     final db      = await DB.instance;
-    final payload = {'name': name, 'message': _msgCtrl.text.trim()};
+    final payload = {'name': name, 'message': _msgCtrl.text.trim(), 'delay_seconds': _delaySeconds};
     final existing = widget.existing;
     if (existing != null) {
       final id = existing['id'] as int;
@@ -397,6 +442,25 @@ class _MessageFormScreenState extends State<_MessageFormScreen> {
               alignLabelWithHint: true,
             ),
           ),
+          const SizedBox(height: 20),
+
+          // ── Send Delay ─────────────────────────────────────────────────
+          const Text('SEND DELAY (after trigger fires)',
+              style: TextStyle(color: Colors.grey, fontSize: 11,
+                  fontWeight: FontWeight.w600, letterSpacing: 1.0)),
+          const SizedBox(height: 8),
+          Row(children: [
+            _FormDelayField(ctrl: _delayDCtrl, label: 'd'),
+            const SizedBox(width: 8),
+            _FormDelayField(ctrl: _delayHCtrl, label: 'h'),
+            const SizedBox(width: 8),
+            _FormDelayField(ctrl: _delayMCtrl, label: 'm'),
+            const SizedBox(width: 8),
+            _FormDelayField(ctrl: _delaySCtrl, label: 's'),
+            const Spacer(),
+            const Text('(0 = send immediately)',
+                style: TextStyle(color: Color(0xFF555555), fontSize: 11)),
+          ]),
           const SizedBox(height: 24),
 
           // ── Recipients ─────────────────────────────────────────────────
@@ -563,6 +627,31 @@ class _ContactPickerDialogState extends State<_ContactPickerDialog> {
                 ),
         ),
       ]),
+    );
+  }
+}
+
+class _FormDelayField extends StatelessWidget {
+  final TextEditingController ctrl;
+  final String label;
+  const _FormDelayField({required this.ctrl, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 52,
+      child: TextField(
+        controller: ctrl,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        textAlign: TextAlign.center,
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          suffixText: label,
+          suffixStyle: const TextStyle(color: Colors.grey, fontSize: 13),
+        ),
+      ),
     );
   }
 }

@@ -44,32 +44,34 @@ class SmsService {
   static Future<List<Map<String, dynamic>>> sendAllMessages() async {
     final db       = await DB.instance;
     final messages = await db.query('messages', where: 'enabled = 1');
-    final results  = <Map<String, dynamic>>[];
 
-    for (final m in messages) {
+    final futures = messages.map((m) async {
+      final delaySecs = m['delay_seconds'] as int? ?? 0;
+      if (delaySecs > 0) await Future.delayed(Duration(seconds: delaySecs));
+
       final label      = m['name'] as String;
       final body       = m['message'] as String;
       final recipients = await db.query('message_recipients',
           where: 'message_id = ?', whereArgs: [m['id']]);
 
-      if (recipients.isEmpty) continue;
+      if (recipients.isEmpty) return <Map<String, dynamic>>[];
 
       final phones = recipients.map((r) => r['phone'] as String).toList();
 
       if (phones.length > 1) {
         final resp = await _sendGroup(phones, body);
         if (resp['status'] == 'success') {
-          results.add({
+          return <Map<String, dynamic>>[{
             'label':   label,
             'contact': 'Group (${phones.length})',
             'status':  'sent',
             'detail':  resp['message'] ?? '',
-          });
-          continue;
+          }];
         }
         // Group MMS failed — fall back to individual SMS
       }
 
+      final results = <Map<String, dynamic>>[];
       for (final r in recipients) {
         try {
           final resp = await sendSms(r['phone'] as String, body);
@@ -88,8 +90,10 @@ class SmsService {
           });
         }
       }
-    }
+      return results;
+    });
 
-    return results;
+    final nested = await Future.wait(futures);
+    return nested.expand((r) => r).toList();
   }
 }

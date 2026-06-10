@@ -99,6 +99,9 @@ const String kWebPortalHtml = r'''
     .rec-section-hdr { display: flex; align-items: center; justify-content: space-between; margin: 1rem 0 0.5rem; }
     .rec-section-hdr label { margin: 0; }
     .rec-add-btns { display: flex; gap: 0.4rem; }
+    .delay-row { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
+    .delay-row input[type=number] { padding: 0.52rem 0.3rem; width: 52px; }
+    .delay-unit { color: #666; font-size: 0.85rem; margin-right: 0.25rem; }
   </style>
 </head>
 <body>
@@ -155,6 +158,17 @@ const String kWebPortalHtml = r'''
     <div class="field">
       <label>Message to send</label>
       <textarea id="m-message" placeholder="What gets sent when the switch triggers…"></textarea>
+    </div>
+
+    <div class="field">
+      <label>Send delay after trigger fires</label>
+      <div class="delay-row">
+        <input type="number" id="m-dd" min="0" value="0" style="width:52px;text-align:center;"><span class="delay-unit">d</span>
+        <input type="number" id="m-dh" min="0" value="0" style="width:52px;text-align:center;"><span class="delay-unit">h</span>
+        <input type="number" id="m-dm" min="0" value="0" style="width:52px;text-align:center;"><span class="delay-unit">m</span>
+        <input type="number" id="m-ds" min="0" value="0" style="width:52px;text-align:center;"><span class="delay-unit">s</span>
+        <span style="color:#555;font-size:0.78rem;margin-left:0.5rem;">(0 = send immediately)</span>
+      </div>
     </div>
 
     <div class="rec-section-hdr">
@@ -274,6 +288,15 @@ async function loadMessages() {
   renderMessages();
 }
 
+function fmtDelay(secs) {
+  const parts = [];
+  const d = Math.floor(secs / 86400);          if (d) parts.push(d + 'd');
+  const h = Math.floor((secs % 86400) / 3600); if (h) parts.push(h + 'h');
+  const m = Math.floor((secs % 3600) / 60);    if (m) parts.push(m + 'm');
+  const s = secs % 60;                          if (s) parts.push(s + 's');
+  return parts.length ? parts.join(' ') : '0s';
+}
+
 function renderMessages() {
   const el = document.getElementById('messages-list');
   if (_messages.length === 0) {
@@ -299,6 +322,7 @@ function renderMessages() {
             ${esc(recText)}
           </div>
           ${m.message ? `<div class="item-msg">${esc(m.message)}</div>` : ''}
+          ${(m.delay_seconds || 0) > 0 ? `<div style="color:#7eb8f7;font-size:0.78rem;margin-top:0.3rem;">⏱ Sends ${fmtDelay(m.delay_seconds)} after trigger</div>` : ''}
         </div>
         <div class="item-actions">
           <button class="btn btn-ghost btn-sm" onclick="toggleMsg(${m.id},${enabled ? 0 : 1})">${enabled ? 'Disable' : 'Enable'}</button>
@@ -316,6 +340,11 @@ function openModal(id) {
   document.getElementById('modal-title').textContent = id ? 'Edit Message' : 'New Message';
   document.getElementById('m-name').value    = m?.name    ?? '';
   document.getElementById('m-message').value = m?.message ?? '';
+  const ds = m?.delay_seconds || 0;
+  document.getElementById('m-dd').value = Math.floor(ds / 86400);
+  document.getElementById('m-dh').value = Math.floor((ds % 86400) / 3600);
+  document.getElementById('m-dm').value = Math.floor((ds % 3600) / 60);
+  document.getElementById('m-ds').value = ds % 60;
   _recs = m ? (m.recipients || []).map(r => ({name: r.name, phone: r.phone})) : [];
   document.getElementById('add-rec-form').classList.remove('open');
   document.getElementById('r-name').value  = '';
@@ -380,7 +409,11 @@ async function saveMessage() {
     return;
   }
   const message = document.getElementById('m-message').value.trim();
-  const body = {name, message, recipients: _recs};
+  const delay_seconds = (parseInt(document.getElementById('m-dd').value)||0)*86400
+                      + (parseInt(document.getElementById('m-dh').value)||0)*3600
+                      + (parseInt(document.getElementById('m-dm').value)||0)*60
+                      + (parseInt(document.getElementById('m-ds').value)||0);
+  const body = {name, message, delay_seconds, recipients: _recs};
   if (_editId) await api('PUT', '/messages/' + _editId, body);
   else         await api('POST', '/messages', body);
   closeModal();

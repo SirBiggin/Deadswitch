@@ -153,6 +153,7 @@ class WebServer {
         'name': m['name'],
         'message': m['message'],
         'enabled': m['enabled'] ?? 1,
+        'delay_seconds': m['delay_seconds'] ?? 0,
         'recipients': recs
             .map((r) =>
                 {'id': r['id'], 'name': r['name'], 'phone': r['phone']})
@@ -168,6 +169,7 @@ class WebServer {
     final id = await db.insert('messages', {
       'name': b['name'] ?? '',
       'message': b['message'] ?? '',
+      'delay_seconds': b['delay_seconds'] ?? 0,
     });
     for (final r in (b['recipients'] as List? ?? [])) {
       await db.insert('message_recipients', {
@@ -184,7 +186,7 @@ class WebServer {
     final b = await _body(req);
     final db = await DB.instance;
     await db.update('messages',
-        {'name': b['name'] ?? '', 'message': b['message'] ?? ''},
+        {'name': b['name'] ?? '', 'message': b['message'] ?? '', 'delay_seconds': b['delay_seconds'] ?? 0},
         where: 'id = ?', whereArgs: [mid]);
     await db.delete('message_recipients',
         where: 'message_id = ?', whereArgs: [mid]);
