@@ -53,6 +53,18 @@ class _MessagesScreenState extends State<MessagesScreen> {
     _load();
   }
 
+  Future<void> _toggleEnabled(int id, bool currentlyEnabled) async {
+    final db = await DB.instance;
+    await db.update('messages', {'enabled': currentlyEnabled ? 0 : 1},
+        where: 'id = ?', whereArgs: [id]);
+    setState(() {
+      final idx = _messages.indexWhere((m) => m['id'] == id);
+      if (idx != -1) {
+        _messages[idx] = {..._messages[idx], 'enabled': currentlyEnabled ? 0 : 1};
+      }
+    });
+  }
+
   void _openForm([Map<String, dynamic>? existing]) {
     Navigator.push(context, MaterialPageRoute(
       builder: (_) => _MessageFormScreen(existing: existing),
@@ -87,6 +99,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                       data: m,
                       onEdit:   () => _openForm(m),
                       onDelete: () => _delete(m['id'] as int, m['name'] as String),
+                      onToggle: () => _toggleEnabled(m['id'] as int, (m['enabled'] as int? ?? 1) != 0),
                     );
                   },
                 ),
@@ -98,7 +111,8 @@ class _MessageCard extends StatelessWidget {
   final Map<String, dynamic> data;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
-  const _MessageCard({required this.data, required this.onEdit, required this.onDelete});
+  final VoidCallback onToggle;
+  const _MessageCard({required this.data, required this.onEdit, required this.onDelete, required this.onToggle});
 
   @override
   Widget build(BuildContext context) {
@@ -106,58 +120,85 @@ class _MessageCard extends StatelessWidget {
     final count      = recipients.length;
     final names      = recipients.map((r) => r['name'] as String).join(', ');
     final message    = data['message'] as String? ?? '';
+    final enabled    = (data['enabled'] as int? ?? 1) != 0;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onEdit,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(data['name'] as String,
-                  style: const TextStyle(color: Colors.white,
-                      fontWeight: FontWeight.w600, fontSize: 15)),
-              const SizedBox(height: 4),
-              Row(children: [
-                const Icon(Icons.people, size: 13, color: Color(0xFF2563eb)),
-                const SizedBox(width: 4),
-                Expanded(child: Text(
-                  count == 0
-                      ? 'No recipients'
-                      : '$count recipient${count == 1 ? '' : 's'}: $names',
-                  style: const TextStyle(color: Color(0xFF888888), fontSize: 12),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                )),
-              ]),
-              if (message.isNotEmpty) ...[
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.45,
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onEdit,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Text(data['name'] as String,
+                      style: const TextStyle(color: Colors.white,
+                          fontWeight: FontWeight.w600, fontSize: 15)),
+                  if (!enabled) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF333333),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text('disabled',
+                          style: TextStyle(color: Color(0xFF888888), fontSize: 10)),
+                    ),
+                  ],
+                ]),
                 const SizedBox(height: 4),
-                Text(message,
-                    style: const TextStyle(color: Color(0xFF666666), fontSize: 12),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis),
-              ],
-            ])),
-            Column(mainAxisSize: MainAxisSize.min, children: [
-              IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF888888)),
-                onPressed: onEdit,
-                tooltip: 'Edit',
-                padding: const EdgeInsets.all(6),
-                constraints: const BoxConstraints(),
-              ),
-              const SizedBox(height: 4),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFF884444)),
-                onPressed: onDelete,
-                tooltip: 'Delete',
-                padding: const EdgeInsets.all(6),
-                constraints: const BoxConstraints(),
-              ),
+                Row(children: [
+                  const Icon(Icons.people, size: 13, color: Color(0xFF2563eb)),
+                  const SizedBox(width: 4),
+                  Expanded(child: Text(
+                    count == 0
+                        ? 'No recipients'
+                        : '$count recipient${count == 1 ? '' : 's'}: $names',
+                    style: const TextStyle(color: Color(0xFF888888), fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  )),
+                ]),
+                if (message.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(message,
+                      style: const TextStyle(color: Color(0xFF666666), fontSize: 12),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                ],
+              ])),
+              Column(mainAxisSize: MainAxisSize.min, children: [
+                Transform.scale(
+                  scale: 0.7,
+                  child: Switch(
+                    value: enabled,
+                    onChanged: (_) => onToggle(),
+                    activeColor: const Color(0xFF2563eb),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF888888)),
+                  onPressed: onEdit,
+                  tooltip: 'Edit',
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(height: 4),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFF884444)),
+                  onPressed: onDelete,
+                  tooltip: 'Delete',
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
+                ),
+              ]),
             ]),
-          ]),
+          ),
         ),
       ),
     );

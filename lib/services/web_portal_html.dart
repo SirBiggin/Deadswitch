@@ -285,11 +285,15 @@ function renderMessages() {
     const recText = recs.length === 0
       ? 'No recipients'
       : recs.length + ' recipient' + (recs.length === 1 ? '' : 's') + ': ' + recs.map(r => esc(r.name)).join(', ');
+    const enabled = m.enabled !== 0;
     return `
-    <div class="card" style="padding:0.9rem 1rem;">
+    <div class="card" style="padding:0.9rem 1rem;${enabled ? '' : 'opacity:0.45;'}">
       <div class="item-row">
         <div class="item-info">
-          <div class="item-name">${esc(m.name)}</div>
+          <div class="item-name" style="display:flex;align-items:center;gap:0.4rem;">
+            ${esc(m.name)}
+            ${!enabled ? '<span style="font-size:0.72rem;color:#888;background:#333;border-radius:4px;padding:1px 6px;">disabled</span>' : ''}
+          </div>
           <div class="item-recipients">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             ${esc(recText)}
@@ -297,6 +301,7 @@ function renderMessages() {
           ${m.message ? `<div class="item-msg">${esc(m.message)}</div>` : ''}
         </div>
         <div class="item-actions">
+          <button class="btn btn-ghost btn-sm" onclick="toggleMsg(${m.id},${enabled ? 0 : 1})">${enabled ? 'Disable' : 'Enable'}</button>
           <button class="btn btn-ghost btn-sm" onclick="openModal(${m.id})">Edit</button>
           <button class="btn btn-danger btn-sm" onclick="delMessage(${m.id},'${esc(m.name)}')">Delete</button>
         </div>
@@ -385,6 +390,11 @@ async function saveMessage() {
 async function delMessage(id, name) {
   if (!confirm('Delete "' + name + '"?')) return;
   await api('DELETE', '/messages/' + id);
+  await loadMessages();
+}
+
+async function toggleMsg(id, enabledVal) {
+  await api('PATCH', '/messages/' + id, {enabled: enabledVal});
   await loadMessages();
 }
 

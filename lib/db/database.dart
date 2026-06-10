@@ -11,12 +11,13 @@ class DB {
 
   static Future<Database> _open() async {
     final path = join(await getDatabasesPath(), 'deadswitch.db');
-    return openDatabase(path, version: 4,
+    return openDatabase(path, version: 5,
       onCreate: (db, _) async {
         await db.execute('''CREATE TABLE messages(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
           message TEXT NOT NULL DEFAULT '',
+          enabled INTEGER NOT NULL DEFAULT 1,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP)''');
         await db.execute('''CREATE TABLE message_recipients(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,6 +94,10 @@ class DB {
               GROUP BY message_id, phone
             )
           ''');
+        }
+        if (oldVersion < 5) {
+          await db.execute(
+              'ALTER TABLE messages ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1');
         }
       },
     );

@@ -63,6 +63,8 @@ class WebServer {
           (Request r, String id) => _updateMessage(r, id));
       router.delete('/api/messages/<id>',
           (Request r, String id) => _deleteMessage(r, id));
+      router.patch('/api/messages/<id>',
+          (Request r, String id) => _patchMessage(r, id));
       router.get('/api/phonebook', _getPhonebook);
       router.get('/api/settings', _getSettings);
       router.put('/api/settings', _updateSettings);
@@ -115,7 +117,7 @@ class WebServer {
 
   static const _corsHeaders = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   };
 
@@ -150,6 +152,7 @@ class WebServer {
         'id': m['id'],
         'name': m['name'],
         'message': m['message'],
+        'enabled': m['enabled'] ?? 1,
         'recipients': recs
             .map((r) =>
                 {'id': r['id'], 'name': r['name'], 'phone': r['phone']})
@@ -191,6 +194,17 @@ class WebServer {
         'name': r['name'] ?? '',
         'phone': r['phone'] ?? '',
       });
+    }
+    return _ok({'ok': true});
+  }
+
+  static Future<Response> _patchMessage(Request req, String id) async {
+    final mid = int.parse(id);
+    final b = await _body(req);
+    final db = await DB.instance;
+    if (b.containsKey('enabled')) {
+      await db.update('messages', {'enabled': b['enabled']},
+          where: 'id = ?', whereArgs: [mid]);
     }
     return _ok({'ok': true});
   }

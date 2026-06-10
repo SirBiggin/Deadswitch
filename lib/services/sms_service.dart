@@ -43,7 +43,7 @@ class SmsService {
 
   static Future<List<Map<String, dynamic>>> sendAllMessages() async {
     final db       = await DB.instance;
-    final messages = await db.query('messages');
+    final messages = await db.query('messages', where: 'enabled = 1');
     final results  = <Map<String, dynamic>>[];
 
     for (final m in messages) {
