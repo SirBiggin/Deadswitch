@@ -24,7 +24,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   bool _isLocked = false;
   bool _hasPin = false;
   int _statusRefresh = 0;
-  int _delayMinutes = 15;
+  int _delaySeconds = 900;
 
   @override
   void initState() {
@@ -55,8 +55,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Future<void> _loadDelay() async {
-    final d = await SettingsService.delayMinutes;
-    if (mounted) setState(() => _delayMinutes = d);
+    final d = await SettingsService.delaySeconds;
+    if (mounted) setState(() => _delaySeconds = d);
   }
 
   @override
@@ -103,8 +103,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Future<void> _initiate() async {
-    final delay = await SettingsService.delayMinutes;
-    final provisional = DateTime.now().add(Duration(minutes: delay));
+    final delay = await SettingsService.delaySeconds;
+    final provisional = DateTime.now().add(Duration(seconds: delay));
     setState(() => _sendAt = provisional);
     _startTimer();
     // Post notification BEFORE starting the foreground service so the
@@ -138,7 +138,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _StatusCard(key: ValueKey(_statusRefresh), onRefresh: _checkPending),
         const SizedBox(height: 12),
-        _TriggerCard(sendAt: _sendAt, onInitiate: _initiate, onAbort: _abort, delayMinutes: _delayMinutes),
+        _TriggerCard(sendAt: _sendAt, onInitiate: _initiate, onAbort: _abort, delaySeconds: _delaySeconds),
       ]),
     );
   }
@@ -268,16 +268,33 @@ class _TriggerCard extends StatelessWidget {
   final DateTime? sendAt;
   final VoidCallback onInitiate;
   final VoidCallback onAbort;
-  final int delayMinutes;
-  const _TriggerCard({this.sendAt, required this.onInitiate, required this.onAbort, required this.delayMinutes});
+  final int delaySeconds;
+  const _TriggerCard({this.sendAt, required this.onInitiate, required this.onAbort, required this.delaySeconds});
 
   String _countdown() {
     if (sendAt == null) return '';
     final remaining = sendAt!.difference(DateTime.now());
     if (remaining.isNegative) return 'Sending…';
-    final m = remaining.inMinutes.toString().padLeft(2, '0');
-    final s = (remaining.inSeconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
+    final d = remaining.inDays;
+    final h = remaining.inHours % 24;
+    final m = remaining.inMinutes % 60;
+    final s = remaining.inSeconds % 60;
+    if (d > 0) return '${d}d ${h.toString().padLeft(2,'0')}:${m.toString().padLeft(2,'0')}:${s.toString().padLeft(2,'0')}';
+    return '${m.toString().padLeft(2,'0')}:${s.toString().padLeft(2,'0')}';
+  }
+
+  static String _formatDelay(int secs) {
+    final d = secs ~/ 86400;
+    final h = (secs % 86400) ~/ 3600;
+    final m = (secs % 3600) ~/ 60;
+    final s = secs % 60;
+    final parts = <String>[
+      if (d > 0) '${d}d',
+      if (h > 0) '${h}h',
+      if (m > 0) '${m}m',
+      if (s > 0) '${s}s',
+    ];
+    return parts.isEmpty ? '0s' : parts.join(' ');
   }
 
   @override
@@ -290,7 +307,7 @@ class _TriggerCard extends StatelessWidget {
                 const Text('Dead Switch',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                 const SizedBox(height: 8),
-                Text('Triggers all messages in $delayMinutes minute${delayMinutes == 1 ? '' : 's'}.',
+                Text('Triggers all messages in ${_formatDelay(delaySeconds)}.',
                     style: TextStyle(color: Colors.grey, fontSize: 13), textAlign: TextAlign.center),
                 const SizedBox(height: 16),
                 SizedBox(

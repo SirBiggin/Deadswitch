@@ -15,7 +15,10 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _testToCtrl     = TextEditingController();
   final _customCodeCtrl = TextEditingController();
-  final _delayCtrl      = TextEditingController();
+  final _dayCtrl        = TextEditingController();
+  final _hourCtrl       = TextEditingController();
+  final _minCtrl        = TextEditingController();
+  final _secCtrl        = TextEditingController();
   String _version = '';
   bool _testing = false;
   String? _testResult;
@@ -23,7 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _webPortalEnabled = false;
   String? _webIp;
   String _countryCode = '1';
-  int _delayMinutes = 15;
+  int _delaySeconds = 900;
 
   @override
   void initState() { super.initState(); _load(); }
@@ -32,7 +35,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _testToCtrl.dispose();
     _customCodeCtrl.dispose();
-    _delayCtrl.dispose();
+    _dayCtrl.dispose();
+    _hourCtrl.dispose();
+    _minCtrl.dispose();
+    _secCtrl.dispose();
     super.dispose();
   }
 
@@ -40,17 +46,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final portal = await SettingsService.webPortalEnabled;
     final ip     = portal ? await WebServer.localIp : null;
     final code   = await SettingsService.countryCode;
-    final delay  = await SettingsService.delayMinutes;
+    final delay  = await SettingsService.delaySeconds;
     final info   = await PackageInfo.fromPlatform();
     setState(() {
       _webPortalEnabled    = portal;
       _webIp               = ip;
       _countryCode         = code;
-      _delayMinutes        = delay;
+      _delaySeconds        = delay;
       _version             = info.version;
       _customCodeCtrl.text = code;
-      _delayCtrl.text      = delay.toString();
     });
+    _setDelayControllers(delay);
   }
 
   String _normalizePhone(String phone) =>
@@ -61,18 +67,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _countryCode = code);
   }
 
-  Future<void> _saveDelay(String value) async {
-    final parsed = int.tryParse(value.trim());
-    if (parsed == null || parsed < 1) {
-      _delayCtrl.text = _delayMinutes.toString();
+  void _setDelayControllers(int totalSeconds) {
+    _dayCtrl.text  = (totalSeconds ~/ 86400).toString();
+    _hourCtrl.text = ((totalSeconds % 86400) ~/ 3600).toString();
+    _minCtrl.text  = ((totalSeconds % 3600) ~/ 60).toString();
+    _secCtrl.text  = (totalSeconds % 60).toString();
+  }
+
+  Future<void> _saveDelay() async {
+    final d = int.tryParse(_dayCtrl.text.trim())  ?? 0;
+    final h = int.tryParse(_hourCtrl.text.trim()) ?? 0;
+    final m = int.tryParse(_minCtrl.text.trim())  ?? 0;
+    final s = int.tryParse(_secCtrl.text.trim())  ?? 0;
+    final total = d * 86400 + h * 3600 + m * 60 + s;
+    if (total < 1) {
+      _setDelayControllers(_delaySeconds);
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Enter a number of minutes (minimum 1)')));
+          const SnackBar(content: Text('Delay must be at least 1 second')));
       return;
     }
-    await SettingsService.setDelayMinutes(parsed);
-    setState(() => _delayMinutes = parsed);
+    await SettingsService.setDelaySeconds(total);
+    setState(() => _delaySeconds = total);
+    final parts = <String>[
+      if (d > 0) '$d day${d == 1 ? '' : 's'}',
+      if (h > 0) '$h hr${h == 1 ? '' : 's'}',
+      if (m > 0) '$m min${m == 1 ? '' : 's'}',
+      if (s > 0) '$s sec${s == 1 ? '' : 's'}',
+    ];
     ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Trigger delay set to $parsed minute${parsed == 1 ? '' : 's'}')));
+        SnackBar(content: Text('Trigger delay set to ${parts.join(' ')}')));
   }
 
   Future<void> _testSend() async {
@@ -159,25 +182,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const Text('How long to wait before sending messages after the trigger is activated.',
                   style: TextStyle(color: Colors.grey, fontSize: 12)),
               const SizedBox(height: 12),
-              Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-                SizedBox(
-                  width: 80,
-                  child: TextField(
-                    controller: _delayCtrl,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                    ),
-                    onSubmitted: _saveDelay,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Text('minutes', style: TextStyle(color: Colors.grey, fontSize: 14)),
+              Row(children: [
+                _DelayField(ctrl: _dayCtrl,  label: 'd'),
+                const SizedBox(width: 8),
+                _DelayField(ctrl: _hourCtrl, label: 'h'),
+                const SizedBox(width: 8),
+                _DelayField(ctrl: _minCtrl,  label: 'm'),
+                const SizedBox(width: 8),
+                _DelayField(ctrl: _secCtrl,  label: 's'),
                 const Spacer(),
                 TextButton(
-                  onPressed: () => _saveDelay(_delayCtrl.text),
+                  onPressed: _saveDelay,
                   child: const Text('Save'),
                 ),
               ]),
@@ -362,3 +377,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ]),
   );
 }
+
+class _DelayField extends StatelessWidget {
+  final TextEditingController ctrl;
+  final String label;
+  const _DelayField({required this.ctrl, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 52,
+      child: TextField(
+        controller: ctrl,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        textAlign: TextAlign.center,
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          suffixText: label,
+          suffixStyle: const TextStyle(color: Colors.grey, fontSize: 13),
+        ),
+      ),
+    );
+  }
+}
+

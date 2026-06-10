@@ -14,16 +14,16 @@ class TriggerService {
   static Future<DateTime> initiate() async {
     _triggerTimer?.cancel();
 
-    final delay  = await SettingsService.delayMinutes;
+    final delay  = await SettingsService.delaySeconds;
     final db = await DB.instance;
-    final sendAt = DateTime.now().toUtc().add(Duration(minutes: delay));
-    DebugLogger.log('TRIGGER', 'initiate delay=${delay}m sendAt=$sendAt');
+    final sendAt = DateTime.now().toUtc().add(Duration(seconds: delay));
+    DebugLogger.log('TRIGGER', 'initiate delay=${delay}s sendAt=$sendAt');
     await db.update('pending_triggers', {'status': 'cancelled'},
         where: "status = 'pending'");
     await db.insert('pending_triggers', {'send_at': sendAt.toIso8601String()});
 
     _triggerTimer = Timer(
-      Duration(minutes: delay),
+      Duration(seconds: delay),
       () => _fire(sendAt),
     );
 
